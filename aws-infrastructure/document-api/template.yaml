@@ -1,0 +1,295 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Authenticated Markdown ingestion through HTTP API, Lambda, S3 and DynamoDB.
+Parameters:
+  ArtifactBucket:
+    Type: String
+    Description: Existing same-region bucket containing the Lambda zip.
+  ArtifactKey:
+    Type: String
+    Description: Immutable S3 key of the packaged Lambda zip (change for each release).
+  ReservedConcurrency:
+    Type: Number
+    Default: -1
+    AllowedValues: [-1, 5]
+    Description: '-1 uses account concurrency; reserve 5 only after confirming sufficient quota.'
+  CognitoUserPoolId:
+    Type: String
+    AllowedPattern: '[a-z]{2}(-[a-z]+)+-[0-9]_[A-Za-z0-9]+'
+    Description: Existing approved Cognito pool in this AWS region.
+  CognitoClientId:
+    Type: String
+    AllowedPattern: '[a-z0-9]{1,128}'
+    Description: Dedicated public upload client with USER_PASSWORD_AUTH enabled.
+  BrowserCognitoUserPoolId:
+    Type: String
+    AllowedPattern: '[a-z]{2}(-[a-z]+)+-[0-9]_[A-Za-z0-9]+'
+    Description: Existing approved literal-username pool for browser uploader login.
+  BrowserCognitoClientId:
+    Type: String
+    AllowedPattern: '[a-z0-9]{1,128}'
+    Description: Existing public username-pool upload client with code and PKCE login.
+Conditions:
+  ReserveConcurrency: !Equals [!Ref ReservedConcurrency, 5]
+Resources:
+  Documents:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'softrobots-document-api-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ObjectOwnership: BucketOwnerEnforced}]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      VersioningConfiguration: {Status: Suspended}
+  DocumentsPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Documents
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource: [!GetAtt Documents.Arn, !Sub '${Documents.Arn}/*']
+            Condition: {Bool: {'aws:SecureTransport': 'false'}}
+  AgentWorkHistory:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'agent-work-history--${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ObjectOwnership: BucketOwnerEnforced}]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      VersioningConfiguration: {Status: Suspended}
+  AgentWorkHistoryPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AgentWorkHistory
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource: [!GetAtt AgentWorkHistory.Arn, !Sub '${AgentWorkHistory.Arn}/*']
+            Condition: {Bool: {'aws:SecureTransport': 'false'}}
+  UserFiles:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: softrobots-document-api-user-files
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - {AttributeName: username, AttributeType: S}
+        - {AttributeName: file_id, AttributeType: S}
+      KeySchema:
+        - {AttributeName: username, KeyType: HASH}
+        - {AttributeName: file_id, KeyType: RANGE}
+      SSESpecification: {SSEEnabled: true}
+      PointInTimeRecoverySpecification: {PointInTimeRecoveryEnabled: true}
+  Projects:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: softrobots-projects
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - {AttributeName: project_id, AttributeType: S}
+      KeySchema:
+        - {AttributeName: project_id, KeyType: HASH}
+      SSESpecification: {SSEEnabled: true}
+      PointInTimeRecoverySpecification: {PointInTimeRecoveryEnabled: true}
+  LocalDeletions:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: softrobots-document-api-local-deletions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - {AttributeName: owner_id, AttributeType: S}
+        - {AttributeName: event_id, AttributeType: S}
+      KeySchema:
+        - {AttributeName: owner_id, KeyType: HASH}
+        - {AttributeName: event_id, KeyType: RANGE}
+      SSESpecification: {SSEEnabled: true}
+      PointInTimeRecoverySpecification: {PointInTimeRecoveryEnabled: true}
+  NativeDevicePending:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: softrobots-native-device-pending
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - {AttributeName: pending_id, AttributeType: S}
+      KeySchema:
+        - {AttributeName: pending_id, KeyType: HASH}
+      SSESpecification: {SSEEnabled: true}
+      PointInTimeRecoverySpecification: {PointInTimeRecoveryEnabled: true}
+  NativeDeviceApprovals:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: softrobots-native-device-approvals
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - {AttributeName: approval_id, AttributeType: S}
+      KeySchema:
+        - {AttributeName: approval_id, KeyType: HASH}
+      SSESpecification: {SSEEnabled: true}
+      PointInTimeRecoverySpecification: {PointInTimeRecoveryEnabled: true}
+  NativeDeviceNonces:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: softrobots-native-device-nonces
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - {AttributeName: nonce_id, AttributeType: S}
+      KeySchema:
+        - {AttributeName: nonce_id, KeyType: HASH}
+      SSESpecification: {SSEEnabled: true}
+      PointInTimeRecoverySpecification: {PointInTimeRecoveryEnabled: true}
+      TimeToLiveSpecification: {AttributeName: expires_at, Enabled: true}
+  FunctionLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /softrobots/document-api
+      RetentionInDays: 14
+  UploadFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: [NativeDevicePending, NativeDeviceApprovals, NativeDeviceNonces]
+    Properties:
+      FunctionName: softrobots-document-api-upload
+      Runtime: python3.13
+      Handler: app.lambda_handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/softrobots-document-api-lambda-role'
+      MemorySize: 256
+      Timeout: 28
+      ReservedConcurrentExecutions: !If [ReserveConcurrency, 5, !Ref AWS::NoValue]
+      Code: {S3Bucket: !Ref ArtifactBucket, S3Key: !Ref ArtifactKey}
+      LoggingConfig: {LogGroup: !Ref FunctionLogs}
+      Environment:
+        Variables:
+          DOCUMENTS_BUCKET: !Ref AgentWorkHistory
+          LEGACY_DOCUMENTS_BUCKET: !Ref Documents
+          USER_FILES_TABLE: !Ref UserFiles
+          PROJECTS_TABLE: !Ref Projects
+          DELETIONS_TABLE: !Ref LocalDeletions
+  Api:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-documents'
+      ProtocolType: HTTP
+      Tags: {Project: softrobots-document-api}
+  Integration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref Api
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt UploadFunction.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 29000
+  UploadAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref Api
+      Name: cognito-upload
+      AuthorizerType: JWT
+      IdentitySource: ['$request.header.Authorization']
+      JwtConfiguration:
+        Issuer: !Sub 'https://cognito-idp.${AWS::Region}.${AWS::URLSuffix}/${CognitoUserPoolId}'
+        Audience: [!Ref CognitoClientId]
+  UploadRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref Api
+      RouteKey: POST /documents
+      AuthorizationType: JWT
+      AuthorizerId: !Ref UploadAuthorizer
+      AuthorizationScopes: [aws.cognito.signin.user.admin]
+      Target: !Join ['/', [integrations, !Ref Integration]]
+  BrowserUploadAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref Api
+      Name: cognito-browser-upload
+      AuthorizerType: JWT
+      IdentitySource: ['$request.header.Authorization']
+      JwtConfiguration:
+        Issuer: !Sub 'https://cognito-idp.${AWS::Region}.${AWS::URLSuffix}/${BrowserCognitoUserPoolId}'
+        Audience: [!Ref BrowserCognitoClientId]
+  BrowserUploadRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref Api
+      RouteKey: POST /browser-documents
+      AuthorizationType: JWT
+      AuthorizerId: !Ref BrowserUploadAuthorizer
+      AuthorizationScopes: [aws.cognito.signin.user.admin]
+      Target: !Join ['/', [integrations, !Ref Integration]]
+  Stage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref Api
+      StageName: '$default'
+      Tags: {Project: softrobots-document-api}
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 5
+        ThrottlingRateLimit: 2
+  InvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref UploadFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*/POST/documents'
+      SourceAccount: !Ref AWS::AccountId
+  BrowserInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref UploadFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*/POST/browser-documents'
+      SourceAccount: !Ref AWS::AccountId
+Outputs:
+  BrowserOriginUrl:
+    Description: Direct username-pool upload origin; requires browser uploader access tokens.
+    Value: !Sub 'https://${Api}.execute-api.${AWS::Region}.${AWS::URLSuffix}/browser-documents'
+  OriginUrl:
+    Description: Direct API URL; requires a Cognito access token.
+    Value: !Sub 'https://${Api}.execute-api.${AWS::Region}.${AWS::URLSuffix}/documents'
+  InvokeArn:
+    Description: Route identity only; IAM invoke permission does not authorize JWT uploads.
+    Value: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*/POST/documents'
+  DocumentsBucket:
+    Value: !Ref AgentWorkHistory
+  LegacyDocumentsBucket:
+    Value: !Ref Documents
+  UserFilesTable:
+    Value: !Ref UserFiles
+  LocalDeletionsTable:
+    Value: !Ref LocalDeletions

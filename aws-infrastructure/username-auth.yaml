@@ -1,0 +1,140 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Retained username Cognito pool, hosted login and public upload client.
+Parameters:
+  EnableEmailOtp:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+    - 'false'
+    - 'true'
+  DomainPrefix:
+    Type: String
+    Description: Globally unique Cognito hosted-login prefix.
+  EmailSourceArn:
+    Type: String
+    Description: Verified SES identity ARN; required only when EnableEmailOtp is true.
+    MinLength: 20
+    AllowedPattern: arn:[a-z0-9-]+:ses:[a-z0-9-]+:[0-9]{12}:identity/.+
+  EmailFrom:
+    Type: String
+    Default: ''
+    Description: Verified sender; required only when EnableEmailOtp is true.
+Conditions:
+  EmailOtpEnabled:
+    Fn::Equals:
+    - Ref: EnableEmailOtp
+    - 'true'
+Resources:
+  Pool:
+    Type: AWS::Cognito::UserPool
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      UserPoolName: gb-systems-username-user-pool
+      UserPoolTier: ESSENTIALS
+      DeletionProtection: ACTIVE
+      UsernameConfiguration:
+        CaseSensitive: false
+      AliasAttributes:
+      - email
+      AutoVerifiedAttributes:
+      - email
+      Schema:
+      - Name: email
+        AttributeDataType: String
+        Required: false
+        Mutable: true
+      - Name: account_kind
+        AttributeDataType: String
+        Required: false
+        Mutable: false
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      EmailConfiguration:
+        Fn::If:
+        - EmailOtpEnabled
+        - EmailSendingAccount: DEVELOPER
+          SourceArn:
+            Ref: EmailSourceArn
+          From:
+            Ref: EmailFrom
+        - EmailSendingAccount: COGNITO_DEFAULT
+      MfaConfiguration: OPTIONAL
+      EnabledMfas:
+      - SOFTWARE_TOKEN_MFA
+      WebAuthnUserVerification: required
+      WebAuthnFactorConfiguration: MULTI_FACTOR_WITH_USER_VERIFICATION
+      Policies:
+        SignInPolicy:
+          AllowedFirstAuthFactors:
+            Fn::If:
+            - EmailOtpEnabled
+            - - PASSWORD
+              - WEB_AUTHN
+              - EMAIL_OTP
+            - - PASSWORD
+              - WEB_AUTHN
+        PasswordPolicy:
+          MinimumLength: 16
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          TemporaryPasswordValidityDays: 7
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+        - Name: verified_email
+          Priority: 1
+      UserPoolTags:
+        Project: softrobots-systems
+        IdentityPurpose: username-accounts
+  Domain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      UserPoolId:
+        Ref: Pool
+      Domain:
+        Ref: DomainPrefix
+      ManagedLoginVersion: 2
+  UploadClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId:
+        Ref: Pool
+      ClientName: work-organizer-document-upload
+      GenerateSecret: false
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+      - code
+      AllowedOAuthScopes:
+      - aws.cognito.signin.user.admin
+      SupportedIdentityProviders:
+      - COGNITO
+      CallbackURLs:
+      - http://localhost:8765/callback
+      ExplicitAuthFlows:
+      - ALLOW_USER_AUTH
+      - ALLOW_REFRESH_TOKEN_AUTH
+      - ALLOW_USER_PASSWORD_AUTH
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      AccessTokenValidity: 5
+      IdTokenValidity: 5
+      RefreshTokenValidity: 90
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+Outputs:
+  UserPoolId:
+    Value:
+      Ref: Pool
+  Issuer:
+    Value:
+      Fn::Sub: https://cognito-idp.${AWS::Region}.${AWS::URLSuffix}/${Pool}
+  UploadClientId:
+    Value:
+      Ref: UploadClient
+  Domain:
+    Value:
+      Fn::Sub: https://${DomainPrefix}.auth.${AWS::Region}.amazoncognito.com
