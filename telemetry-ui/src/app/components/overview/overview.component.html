@@ -1,0 +1,47 @@
+<div class="wo-stack wo-enter">
+  <wo-card
+    eyebrow="A foundation for what comes next"
+    heading="Make room for focused work."
+    description="A clear place for your priorities, your progress, and what comes next."
+  >
+    <div class="wo-actions">
+      <a class="wo-button" routerLink="/work-organizer/workspace/tasks"
+        >Organize my work <wo-icon name="arrow" /></a
+      ><a
+        class="wo-button wo-button--secondary"
+        routerLink="/work-organizer/design-system/components"
+        >Explore the design system</a
+      >
+    </div>
+  </wo-card>
+  <div class="wo-grid">
+    <wo-card class="wo-col-md-4" heading="Open work"
+      ><p class="metric">{{ store.items().length - store.completed() }}</p>
+      <p class="wo-muted">Ready for your attention</p></wo-card
+    >
+    <wo-card class="wo-col-md-4" heading="Completed"
+      ><p class="metric">{{ store.completed() }}</p>
+      <p class="wo-muted">One step forward at a time</p></wo-card
+    >
+    <wo-card class="wo-col-md-4" heading="Your workspace"
+      ><p class="metric metric--text">A fresh start</p>
+      <p class="wo-muted">Changes stay in this tab until reload.</p></wo-card
+    >
+  </div>
+  <div class="wo-grid">
+    <wo-api-status class="wo-col-lg-6" />
+    <wo-card
+      class="wo-col-lg-6"
+      heading="Built from the same foundation"
+      description="Consistent cards, readable forms, and flexible layouts."
+    >
+      <div class="wo-grid">
+        <wo-card class="wo-col-md-6" heading="Thoughtful structure"
+          ><p>Every detail has a place, even inside another card.</p></wo-card
+        ><wo-card class="wo-col-md-6" heading="Room to grow"
+          ><p>Adapt the grid as your work evolves.</p></wo-card
+        >
+      </div>
+    </wo-card>
+  </div>
+</div>

@@ -1,0 +1,115 @@
+<div class="wo-stack wo-enter">
+  <nav class="wo-subnav" aria-label="Project Tracker">
+    <a routerLink="/work-organizer/workspace/project-tracker" [class.active]="!!id">Work items</a
+    ><a
+      routerLink="/work-organizer/workspace/project-tracker/new"
+      [attr.aria-current]="!id ? 'page' : null"
+      >Create work item</a
+    >
+  </nav>
+  <wo-card [heading]="id ? 'Work item details' : 'Create work item'">
+    @if (loadError()) {
+      <p role="alert">{{ loadError() }}</p>
+      <div class="wo-actions">
+        <button type="button" (click)="retryLoad()">Retry loading saved work</button
+        ><a routerLink="/work-organizer/workspace/project-tracker">Back to board</a>
+      </div>
+    } @else if (missing()) {
+      <p role="alert">This work item was not found in this browser for your account.</p>
+      <a routerLink="/work-organizer/workspace/project-tracker">Back to board</a>
+    } @else {
+      <form class="wo-stack" [formGroup]="form" (ngSubmit)="save()" novalidate>
+        <wo-text-input
+          inputId="work-title"
+          label="Title"
+          [control]="form.controls.title"
+          [required]="true"
+          [submitted]="submitted"
+          hint="1–120 characters."
+        />
+        <wo-text-input
+          inputId="work-project"
+          label="Project"
+          [control]="form.controls.project"
+          [required]="true"
+          [submitted]="submitted"
+          hint="1–80 characters."
+        />
+        <div class="wo-field">
+          <label class="wo-field-label" for="work-status">Status</label>
+          <select id="work-status" formControlName="status">
+            @for (status of statuses; track status.value) {
+              <option [value]="status.value">{{ status.label }}</option>
+            }
+          </select>
+        </div>
+        <div class="wo-stack">
+          <p class="wo-field-label" id="description-label">Description (Markdown)</p>
+          <div class="wo-tabs" role="tablist" aria-labelledby="description-label">
+            <button
+              id="description-edit"
+              type="button"
+              role="tab"
+              [attr.aria-selected]="!preview()"
+              [tabIndex]="preview() ? -1 : 0"
+              aria-controls="description-panel"
+              (click)="preview.set(false)"
+              (keydown)="moveDescriptionTab($event)"
+            >
+              Edit
+            </button>
+            <button
+              id="description-preview"
+              type="button"
+              role="tab"
+              [attr.aria-selected]="preview()"
+              [tabIndex]="preview() ? 0 : -1"
+              aria-controls="description-panel"
+              (click)="preview.set(true)"
+              (keydown)="moveDescriptionTab($event)"
+            >
+              Preview
+            </button>
+          </div>
+          <section
+            id="description-panel"
+            role="tabpanel"
+            [attr.aria-labelledby]="preview() ? 'description-preview' : 'description-edit'"
+            tabindex="0"
+          >
+            @if (preview()) {
+              <wo-markdown [content]="form.controls.description.value" />
+            } @else {
+              <div class="wo-field">
+                <label class="wo-field-label" for="work-description">Edit description</label>
+                <textarea
+                  id="work-description"
+                  formControlName="description"
+                  rows="10"
+                  maxlength="20000"
+                  aria-describedby="description-hint"
+                ></textarea>
+                <p id="description-hint" class="wo-field-hint">
+                  Up to 20,000 characters. Use headings, lists and links.
+                </p>
+              </div>
+            }
+          </section>
+        </div>
+        @if (form.invalid && submitted) {
+          <p role="alert">Check the title, project, status and description before saving.</p>
+        }
+        @if (store.error()) {
+          <p role="alert">{{ store.error() }}</p>
+        }
+        <div class="wo-actions">
+          <button type="submit">{{ id ? 'Save changes' : 'Create work item' }}</button
+          ><a routerLink="/work-organizer/workspace/project-tracker">Back to board</a>
+        </div>
+        <p class="wo-muted">
+          Saved only in this browser for your account. Clearing browser data removes saved work.
+        </p>
+      </form>
+    }
+  </wo-card>
+</div>

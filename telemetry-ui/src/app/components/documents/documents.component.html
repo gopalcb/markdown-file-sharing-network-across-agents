@@ -1,0 +1,146 @@
+<section class="tm-documents">
+  <div class="tm-documents-header">
+    <h2 class="tm-heading">Documents ({{ documents().length }})</h2>
+    <div class="tm-document-search">
+      <input
+        type="search"
+        aria-label="Search documents"
+        placeholder="Search documents…"
+        [value]="query()"
+        (input)="query.set($any($event.target).value)"
+      /><svg
+        width="14"
+        height="14"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        aria-hidden="true"
+      >
+        <circle cx="8.5" cy="8.5" r="5.5" />
+        <path d="m12.5 12.5 4 4" />
+      </svg>
+    </div>
+    <div class="tm-document-actions">
+      <wo-select
+        label="Document category and collection"
+        [options]="filterOptions()"
+        [value]="filterValue"
+        (valueChange)="selectFilter($event)"
+      /><button class="tm-primary" type="button" (click)="uploader.open()">↑ &nbsp; Upload</button>
+    </div>
+  </div>
+  <div class="tm-documents-layout">
+    <section
+      class="tm-document-list tm-column wo-kanban-column"
+      aria-label="Documents"
+      [attr.aria-busy]="loading()"
+    >
+      @if (loading()) {
+        <wo-spinner label="Loading documents" />
+      }
+      @if (listError()) {
+        <p role="alert">{{ listError() }}</p>
+        <button type="button" (click)="loadList(retryCursor)">Retry</button>
+      }
+      @for (document of filteredDocuments(); track document.owner + document.file_id) {
+        <div class="tm-document-row tm-document-row--plain">
+          <button
+            type="button"
+            class="tm-document-item wo-document-link"
+            [attr.aria-pressed]="
+              selected()?.file_id === document.file_id && selected()?.owner === document.owner
+            "
+            (click)="selectDocument(document)"
+          >
+            <strong>{{ document.filename }}</strong
+            ><span>{{ document.category }} · {{ document.owner }}</span>
+          </button>
+        </div>
+      } @empty {
+        @if (!loading() && !listError()) {
+          <p class="tm-no-results">
+            {{ query() || category() ? 'No matching documents.' : 'No documents on this page.' }}
+          </p>
+        }
+      }
+      @if (cursor()) {
+        <button
+          type="button"
+          class="tm-load-more"
+          [disabled]="loading()"
+          (click)="loadList(cursor())"
+        >
+          Load more
+        </button>
+      }
+    </section>
+    <article
+      class="tm-column wo-kanban-column tm-document-reader wo-document-reader"
+      aria-label="Document content"
+      [attr.aria-busy]="reading()"
+    >
+      @if (selected(); as document) {
+        @if (reading()) {
+          <wo-spinner label="Opening document" />
+        } @else if (readError()) {
+          <p role="alert">{{ readError() }}</p>
+          <button type="button" (click)="openDocument(document)">Retry opening</button>
+        } @else {
+          <wo-markdown-editor
+            [label]="document.filename"
+            [value]="content()"
+            (valueChange)="content.set($event)"
+            [disabled]="saving()"
+          />
+          <div class="tm-dialog-actions">
+            <button
+              type="button"
+              class="tm-primary"
+              [disabled]="saving() || !dirty() || copySubmitted()"
+              (click)="saveDocument()"
+            >
+              {{ saving() ? 'Saving…' : canRevise() ? 'Save to S3' : 'Save edited copy to S3' }}
+            </button>
+          </div>
+          @if (!canRevise()) {
+            <p class="tm-footnote">
+              Edits save as a copy in your folder. The original document stays unchanged.
+            </p>
+          }
+          @if (savedCopy()) {
+            <button
+              class="tm-load-more"
+              type="button"
+              [disabled]="saving()"
+              (click)="openSavedCopy()"
+            >
+              Open saved copy
+            </button>
+          }
+          @if (saveError()) {
+            <p class="tm-error" role="alert">{{ saveError() }}</p>
+          }
+          @if (saveNotice()) {
+            <p role="status">{{ saveNotice() }}</p>
+          }
+        }
+      } @else {
+        <div class="tm-document-empty">
+          <h2>Your documents, in one place</h2>
+          <p>Select a document to start reading.</p>
+        </div>
+      }
+    </article>
+  </div>
+</section>
+
+<wo-document-upload #uploader (uploaded)="loadList()" />
+<dialog #discardDialog class="tm-dialog" aria-labelledby="discard-title">
+  <h2 id="discard-title">Unsaved Markdown</h2>
+  <p>Discard your edits and continue?</p>
+  <div class="tm-dialog-actions">
+    <button type="button" (click)="discardDialog.close()">Keep editing</button
+    ><button class="tm-primary" type="button" (click)="discard()">Discard edits</button>
+  </div>
+</dialog>

@@ -1,0 +1,42 @@
+<div class="wo-stack wo-enter">
+  <wo-card
+    heading="A shared visual language"
+    description="Quiet surfaces, crisp corners, and green accents that guide attention."
+  >
+    <div class="wo-grid">
+      <wo-card class="wo-col-md-6" heading="Cards within cards"
+        ><p>Group related content. Add another card when it creates a useful boundary.</p>
+        <wo-card heading="A focused detail"
+          ><p>The same surface, spacing, and border at every level.</p></wo-card
+        ></wo-card
+      ><wo-card class="wo-col-md-6" heading="Purposeful actions"
+        ><div class="wo-stack">
+          <div class="wo-actions">
+            <button (click)="message.set('Primary action selected.')">
+              Primary action <wo-icon name="arrow" /></button
+            ><button
+              class="wo-button--secondary"
+              (click)="message.set('Secondary action selected.')"
+            >
+              Secondary action</button
+            ><button class="wo-button--quiet" (click)="message.set('Quiet action selected.')">
+              Quiet action</button
+            ><button disabled>Unavailable</button>
+          </div>
+          <p role="status">{{ message() }}</p>
+        </div></wo-card
+      >
+    </div>
+  </wo-card>
+  <wo-card heading="Small details, consistent results"
+    ><div class="wo-grid">
+      <wo-card class="wo-col-md-4" heading="4px corners"
+        ><p>Cards, fields, and buttons share one corner treatment.</p></wo-card
+      ><wo-card class="wo-col-md-4" heading="One palette"
+        ><p>The page and cards share a soft neutral background.</p></wo-card
+      ><wo-card class="wo-col-md-4" heading="Clear feedback"
+        ><p>Hover, focus, validation, and loading stay visible.</p></wo-card
+      >
+    </div></wo-card
+  >
+</div>

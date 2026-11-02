@@ -1,0 +1,316 @@
+<div class="tm-projects">
+  <div class="tm-titlebar">
+    <div>
+      <h2 class="tm-heading">{{ selectedProject() || 'Projects' }}</h2>
+      <button
+        class="tm-switch"
+        type="button"
+        (click)="switchProject()"
+        [disabled]="!allProjects().length"
+      >
+        Switch project
+      </button>
+    </div>
+    <button class="tm-primary" type="button" (click)="createProject()">
+      ＋ &nbsp; Create project
+    </button>
+  </div>
+  @if (catalog.error() || store.error()) {
+    <div class="tm-error" role="alert">
+      {{ catalog.error() || store.error() }}
+      <button type="button" (click)="catalog.reload(); store.reload()">
+        Reload saved projects
+      </button>
+    </div>
+  }
+  @if (remoteError()) {
+    <p class="tm-error" role="alert">
+      {{ remoteError() }}
+      <button type="button" [disabled]="tasksLoading()" (click)="loadTasks()">Reload tasks</button>
+    </p>
+  }
+  @if (catalog.loading()) {
+    <p role="status">Loading projects…</p>
+  }
+  @if (catalog.cursor()) {
+    <button type="button" (click)="catalog.loadMore()" [disabled]="catalog.loading()">
+      Load more projects
+    </button>
+  }
+  @if (catalog.legacyProjects().length) {
+    <details class="tm-legacy-projects">
+      <summary>Import existing browser projects</summary>
+      <p>
+        These projects are still local. Import them to make them available in the Project dropdown
+        on other browsers.
+      </p>
+      @for (project of catalog.legacyProjects(); track project.name) {
+        <button
+          type="button"
+          [disabled]="catalog.saving()"
+          (click)="catalog.create(project.name, project.description)"
+        >
+          Import {{ project.name }}
+        </button>
+      }
+    </details>
+  }
+  <div class="tm-stats wo-stats" aria-label="Project work item totals">
+    <div class="tm-stat">
+      <span>Total work items</span
+      ><strong>{{ items().length }}<small>in this project</small></strong>
+    </div>
+    @for (column of columns; track column.value; let i = $index) {
+      <div class="tm-stat">
+        <span>{{ ['○', '◐', '✓'][i] }} &nbsp; {{ column.label }}</span
+        ><strong>{{ inStatus(column.value).length }}</strong>
+      </div>
+    }
+  </div>
+  <div class="tm-board wo-kanban">
+    @for (column of columns; track column.value; let i = $index) {
+      <section
+        class="tm-column wo-kanban-column"
+        (dragover)="$event.preventDefault()"
+        (drop)="drop($event, column.value)"
+        [attr.aria-label]="column.label"
+        [attr.aria-busy]="tasksLoading()"
+      >
+        <div class="tm-column-heading">
+          <span [class]="'tm-status tm-status-' + column.value">{{ ['○', '◐', '✓'][i] }}</span>
+          <h3>{{ column.label }}</h3>
+          <b>{{ inStatus(column.value).length }}</b>
+          @if (tasksLoading()) {
+            <wo-spinner [label]="'Loading ' + column.label + ' work items'" />
+          }
+          <button
+            type="button"
+            (click)="openItem(undefined, column.value)"
+            [attr.aria-label]="'Add ' + column.label + ' item'"
+          >
+            +
+          </button>
+        </div>
+        @for (item of inStatus(column.value); track item.id) {
+          <article
+            class="tm-work-card"
+            draggable="true"
+            tabindex="0"
+            role="button"
+            [attr.aria-label]="'Edit ' + item.title"
+            (dragstart)="drag($event, item.id)"
+            (click)="openItem(item)"
+            (keydown.enter)="$event.preventDefault(); openItem(item)"
+            (keydown.space)="$event.preventDefault(); openItem(item)"
+          >
+            <span class="tm-tag wo-project-tag">{{ item.project }}</span
+            ><span class="tm-priority"
+              >{{ item.priority === 'High' ? '↗' : item.priority === 'Low' ? '↓' : '−' }}
+              {{ item.priority || 'Medium' }}</span
+            >
+            <h4>{{ item.title }}</h4>
+            <p>
+              {{
+                item.description ||
+                  ($any(item).owner
+                    ? 'Open the linked plan to read its Markdown details.'
+                    : 'Add a description to this work item.')
+              }}
+            </p>
+            <div class="tm-card-footer">
+              <span>{{ item.due ? '◷ ' + item.due : 'No due date' }}</span
+              ><span>{{ column.value === 'done' ? '✓ Complete' : '↗ Open item' }}</span>
+            </div>
+          </article>
+        } @empty {
+          <div class="tm-empty">A little space for what’s next.</div>
+        }
+        @if (taskCursor()) {
+          <button
+            class="tm-add-card tm-load-more-work-items"
+            type="button"
+            [disabled]="tasksLoading()"
+            (click)="loadTasks(taskCursor())"
+          >
+            Load more work items
+          </button>
+        }
+      </section>
+    }
+  </div>
+  <p class="tm-footnote">
+    Drag cards between columns or open a card to update its details. · Local work items stay in this
+    browser; uploaded plan tasks are shared.
+  </p>
+</div>
+<dialog #projectDialog class="tm-dialog" aria-labelledby="project-dialog-title">
+  <form (ngSubmit)="saveProject()">
+    <h2 id="project-dialog-title">Create project</h2>
+    <label for="project-name">Name</label
+    ><input
+      id="project-name"
+      name="projectName"
+      [(ngModel)]="projectName"
+      required
+      maxlength="80"
+      placeholder="e.g. Website redesign"
+      autofocus
+    />
+    <label for="project-description">Description</label
+    ><textarea
+      id="project-description"
+      name="projectDescription"
+      [(ngModel)]="projectDescription"
+      rows="4"
+      maxlength="2000"
+      placeholder="What is this project about?"
+    ></textarea>
+    @if (catalog.error()) {
+      <p class="tm-error" role="alert">{{ catalog.error() }}</p>
+    }
+    <div class="tm-dialog-actions">
+      <button type="button" (click)="projectDialog.close()">Cancel</button
+      ><button class="tm-primary" type="submit" [disabled]="catalog.saving()">
+        {{ catalog.saving() ? 'Saving…' : 'Save' }}
+      </button>
+    </div>
+  </form>
+</dialog>
+<dialog #switchDialog class="tm-dialog" aria-labelledby="switch-dialog-title">
+  <form (ngSubmit)="saveSelection()">
+    <h2 id="switch-dialog-title">Switch project</h2>
+    <p>Choose the project you want to work on.</p>
+    <label>Project</label
+    ><wo-select
+      label="Project"
+      [options]="projectOptions()"
+      [value]="switchName"
+      (valueChange)="switchName = $event"
+    />
+    @if (catalog.error()) {
+      <p class="tm-error" role="alert">{{ catalog.error() }}</p>
+    }
+    <div class="tm-dialog-actions">
+      <button type="button" (click)="switchDialog.close()">Cancel</button
+      ><button class="tm-primary" type="submit">Save</button>
+    </div>
+  </form>
+</dialog>
+<dialog
+  #itemDialog
+  class="tm-dialog tm-item-drawer"
+  [class.tm-drawer-closing]="closing()"
+  (cancel)="$event.preventDefault(); closeItem()"
+  (animationend)="closing() && $event.animationName === 'tm-drawer-exit' && finishClose()"
+  aria-labelledby="item-dialog-title"
+  (close)="activeTask = null"
+>
+  <form (ngSubmit)="saveItem()">
+    <h2 id="item-dialog-title">{{ editing ? 'Edit work item' : 'New work item' }}</h2>
+    <fieldset [disabled]="busy() || (!!activeTask && !activeTask.editable)">
+      <label for="item-title">Title</label
+      ><input
+        id="item-title"
+        name="title"
+        [(ngModel)]="draft.title"
+        required
+        maxlength="120"
+        placeholder="What needs to be done?"
+        autofocus
+      />
+      <wo-markdown-editor
+        label="Description"
+        [value]="draft.description"
+        (valueChange)="draft.description = $event"
+        [disabled]="busy() || (!!activeTask && !activeTask.editable)"
+        [editFirst]="!editing"
+      />
+      <div class="tm-form-row">
+        <div>
+          <label>Project</label
+          ><wo-select
+            label="Project"
+            [options]="itemProjectOptions()"
+            [value]="draft.project"
+            (valueChange)="draft.project = $event"
+            [disabled]="catalog.loading()"
+          />
+          @if (!itemProjectOptions().length) {
+            <p>No saved projects yet.</p>
+          }
+          @if (draft.project && !hasProject(draft.project)) {
+            <p>
+              {{ draft.project }} is not in the shared catalog yet. Create or import it to keep this
+              assignment.
+            </p>
+          }
+          @if (catalog.cursor()) {
+            <button type="button" (click)="catalog.loadMore()" [disabled]="catalog.loading()">
+              Load more projects
+            </button>
+          }
+          <button type="button" class="tm-switch" (click)="createProject()">Create project</button>
+        </div>
+        <div>
+          <label>Status</label
+          ><wo-select
+            label="Status"
+            [options]="statusOptions"
+            [value]="draft.status"
+            (valueChange)="draft.status = $any($event)"
+          />
+        </div>
+      </div>
+      <div class="tm-form-row">
+        <div>
+          <label for="item-assigned">Assigned to</label
+          ><input
+            id="item-assigned"
+            name="assignedTo"
+            [(ngModel)]="draft.assigned_to"
+            maxlength="120"
+            placeholder="Agent or human name"
+          />
+        </div>
+        <div>
+          <label for="item-created">Created on</label
+          ><input id="item-created" [value]="draft.created_at || 'Not recorded'" readonly />
+        </div>
+      </div>
+      <div class="tm-form-row">
+        <div>
+          <label>Priority</label
+          ><wo-select
+            label="Priority"
+            [options]="priorityOptions"
+            [value]="draft.priority || 'Medium'"
+            (valueChange)="draft.priority = $any($event)"
+          />
+        </div>
+        <div>
+          <label for="item-due">Due date</label
+          ><input type="date" id="item-due" name="due" [(ngModel)]="draft.due" />
+        </div>
+      </div>
+    </fieldset>
+    @if (activeTask && !activeTask.editable) {
+      <p>This plan task belongs to {{ activeTask.owner }} and is read-only.</p>
+    }
+    @if (store.error() || remoteError()) {
+      <p class="tm-error" role="alert">{{ store.error() || remoteError() }}</p>
+    }
+    <div class="tm-dialog-actions">
+      @if (editing && !activeTask) {
+        <button type="button" class="tm-danger" (click)="deleteItem()">Delete</button>
+      }
+      <button type="button" (click)="closeItem()">Close</button
+      ><button
+        class="tm-primary"
+        type="submit"
+        [disabled]="busy() || (!!activeTask && !activeTask.editable)"
+      >
+        Save work item
+      </button>
+    </div>
+  </form>
+</dialog>

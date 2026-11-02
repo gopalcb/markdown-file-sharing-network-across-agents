@@ -1,0 +1,32 @@
+<div class="wo-stack wo-enter">
+  <wo-card
+    heading="One grid, many arrangements"
+    description="A twelve-column grid that stacks naturally on smaller screens. Resize the page to see it adapt."
+  >
+    <div class="wo-stack">
+      <div class="wo-grid" data-grid="halves">
+        <wo-card class="wo-col-md-6" heading="One half"><p>Six columns</p></wo-card
+        ><wo-card class="wo-col-md-6" heading="Another half"><p>Six columns</p></wo-card>
+      </div>
+      <div class="wo-grid" data-grid="thirds">
+        @for (label of ['First', 'Second', 'Third']; track label) {
+          <wo-card class="wo-col-md-4" [heading]="label"><p>Four columns</p></wo-card>
+        }
+      </div>
+      <div class="wo-grid" data-grid="asymmetric">
+        <wo-card class="wo-col-lg-8" heading="Main content"
+          ><p>Eight columns on wide screens, full width when space is limited.</p>
+          <div class="wo-grid">
+            <wo-card class="wo-col-md-6" heading="Nested card"
+              ><p>Content can grow without breaking the grid.</p></wo-card
+            ><wo-card class="wo-col-md-6" heading="Related detail"
+              ><p>Every column can shrink safely.</p></wo-card
+            >
+          </div></wo-card
+        ><wo-card class="wo-col-lg-4" heading="Supporting context"
+          ><p>Four columns on wide screens.</p></wo-card
+        >
+      </div>
+    </div>
+  </wo-card>
+</div>

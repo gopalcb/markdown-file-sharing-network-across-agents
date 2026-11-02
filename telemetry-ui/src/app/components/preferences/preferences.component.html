@@ -1,0 +1,38 @@
+<wo-card
+  class="wo-enter"
+  heading="Made to feel comfortable"
+  description="The workspace follows your device’s motion preference."
+  ><div class="wo-grid">
+    <wo-card class="wo-col-md-6" heading="Motion"
+      ><p>
+        Smooth page transitions are enabled where supported. If your device requests reduced motion,
+        animations pause automatically.
+      </p></wo-card
+    ><wo-card class="wo-col-md-6" heading="Work item storage"
+      ><p>
+        Project Tracker work items are saved in this browser for your account. They remain after
+        reload and sign-out, but do not sync to other devices. Use your own browser profile on a
+        shared device.
+      </p></wo-card
+    >
+    @if (auth.passkeysAvailable()) {
+      <wo-card class="wo-col-md-6" heading="Passkey sign-in">
+        <p>
+          Register a passkey using your device's screen lock or biometrics. Your fingerprint stays
+          on your device.
+        </p>
+        <button
+          class="wo-button"
+          type="button"
+          [disabled]="auth.busy()"
+          (click)="auth.registerPasskey()"
+        >
+          Add a passkey
+        </button>
+        @if (auth.message()) {
+          <p role="status">{{ auth.message() }}</p>
+        }
+      </wo-card>
+    }
+  </div></wo-card
+>

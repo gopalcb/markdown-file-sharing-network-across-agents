@@ -1,0 +1,20 @@
+*
+!app.py
+!routing.py
+!server.py
+!services/
+!services/*.py
+!document_api/
+!document_api/*.py
+!document_api/services/
+!document_api/services/*.py
+!mcp_api/
+!mcp_api/*.py
+!requirements.txt
+
+# Work Organizer is Git/local tooling, never a deployment build input.
+**/watcher.py
+**/work-organizer-skill
+**/.codex
+**/folder-watcher
+**/folder-watcher-work-organizer

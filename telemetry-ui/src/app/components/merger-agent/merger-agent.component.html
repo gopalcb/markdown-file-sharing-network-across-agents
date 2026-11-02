@@ -1,0 +1,176 @@
+<section class="tm-merger-page">
+  <div class="tm-merger-layout">
+    <section class="tm-merger-library tm-column wo-kanban-column" aria-label="Merger documents">
+      <div class="wo-tabs tm-merger-tabs" role="tablist" aria-label="Merger document lists">
+        <button
+          id="merger-documents-tab"
+          type="button"
+          role="tab"
+          aria-controls="merger-documents-panel"
+          [attr.aria-selected]="activeTab() === 'documents'"
+          [attr.tabindex]="activeTab() === 'documents' ? 0 : -1"
+          (click)="selectTab('documents')"
+          (keydown)="moveTab($event, 'merged')"
+        >
+          Documents
+        </button>
+        <button
+          id="merger-merged-tab"
+          type="button"
+          role="tab"
+          aria-controls="merger-merged-panel"
+          [attr.aria-selected]="activeTab() === 'merged'"
+          [attr.tabindex]="activeTab() === 'merged' ? 0 : -1"
+          (click)="selectTab('merged')"
+          (keydown)="moveTab($event, 'documents')"
+        >
+          Merged documents
+          @if (mergedDocuments().length) {
+            <span>({{ mergedDocuments().length }})</span>
+          }
+        </button>
+      </div>
+
+      @if (activeTab() === 'documents') {
+        <div
+          id="merger-documents-panel"
+          role="tabpanel"
+          aria-labelledby="merger-documents-tab"
+          [attr.aria-busy]="loading()"
+        >
+          @if (loading()) {
+            <wo-spinner label="Loading documents" />
+          }
+          @if (listError()) {
+            <p class="tm-error" role="alert">{{ listError() }}</p>
+            <button type="button" (click)="loadDocuments()">Retry</button>
+          }
+          @for (document of documents(); track document.owner + document.file_id) {
+            <div class="tm-document-row">
+              <label class="tm-document-check">
+                <input
+                  type="checkbox"
+                  [checked]="selectedKeys().has(documentKey(document))"
+                  (change)="toggleDocument(document, $any($event.target).checked)"
+                />
+                <span class="tm-visually-hidden">Select {{ document.filename }} for merger</span>
+              </label>
+              <button
+                type="button"
+                class="tm-document-item wo-document-link"
+                (click)="openDocument(document, $event.currentTarget)"
+              >
+                <strong>{{ document.filename }}</strong>
+                <span>{{ document.category }} · {{ document.owner }}</span>
+              </button>
+            </div>
+          } @empty {
+            @if (!loading() && !listError()) {
+              <p class="tm-no-results">No documents are available to merge.</p>
+            }
+          }
+          @if (cursor()) {
+            <button
+              class="tm-load-more"
+              type="button"
+              [disabled]="loading()"
+              (click)="loadDocuments(cursor())"
+            >
+              Load more
+            </button>
+          }
+        </div>
+      } @else {
+        <div id="merger-merged-panel" role="tabpanel" aria-labelledby="merger-merged-tab">
+          @for (document of mergedDocuments(); track document.id) {
+            <div class="tm-document-row tm-document-row--plain">
+              <button
+                type="button"
+                class="tm-document-item wo-document-link"
+                (click)="openMergedDocument(document, $event.currentTarget)"
+              >
+                <strong>{{ document.filename }}</strong>
+                <span>{{ document.sources.length }} source files · UI preview</span>
+              </button>
+            </div>
+          } @empty {
+            <div class="tm-merger-empty">
+              <h2>No merged documents yet</h2>
+              <p>Select source documents, add instructions, and run the merger.</p>
+            </div>
+          }
+        </div>
+      }
+    </section>
+
+    <section class="tm-merger-chat tm-column wo-kanban-column" aria-labelledby="merger-chat-title">
+      <div class="tm-merger-chat-header">
+        <h2 id="merger-chat-title">Merger chat</h2>
+        <span>{{ selectedDocuments().length }} selected</span>
+      </div>
+      <div class="tm-merger-chat-body">
+        @if (selectedDocuments().length) {
+          <section class="tm-merger-selection" aria-labelledby="merger-selection-title">
+            <h3 id="merger-selection-title">Files to merge</h3>
+            <ul>
+              @for (document of selectedDocuments(); track document.owner + document.file_id) {
+                <li>{{ document.filename }}</li>
+              }
+            </ul>
+          </section>
+        } @else {
+          <div class="tm-merger-chat-empty">
+            <h3>Select documents to begin</h3>
+            <p>Use the checkboxes in the Documents tab. Click a filename to preview it.</p>
+          </div>
+        }
+      </div>
+      <form class="tm-merger-compose" novalidate (submit)="$event.preventDefault(); mergeDocuments()">
+        <label for="merger-instructions">Merger instructions</label>
+        <textarea
+          id="merger-instructions"
+          name="mergerInstructions"
+          rows="6"
+          maxlength="4000"
+          style="resize: none"
+          placeholder="Describe how the selected documents should be combined."
+          [value]="instructions()"
+          (input)="instructions.set($any($event.target).value); notice.set('')"
+        ></textarea>
+        <div class="tm-merger-compose-footer">
+          <p class="tm-footnote">UI preview only. Merged documents reset when this page reloads.</p>
+          <button class="tm-primary" type="submit" [disabled]="!canMerge()">
+            Merge documents
+          </button>
+        </div>
+      </form>
+      @if (notice()) {
+        <p class="tm-merger-notice" role="status">{{ notice() }}</p>
+      }
+    </section>
+  </div>
+</section>
+
+<dialog
+  #previewDialog
+  class="tm-dialog tm-document-preview-dialog"
+  aria-labelledby="document-preview-title"
+  (cancel)="$event.preventDefault(); closePreview()"
+>
+  <div class="tm-drawer-header">
+    <h2 id="document-preview-title">{{ preview()?.filename || 'Document preview' }}</h2>
+    <button type="button" aria-label="Close document preview" (click)="closePreview()">×</button>
+  </div>
+  <div class="tm-document-preview-body" [attr.aria-busy]="reading()">
+    @if (reading()) {
+      <wo-spinner label="Opening document" />
+    } @else if (previewError()) {
+      <p class="tm-error" role="alert">{{ previewError() }}</p>
+    } @else if (preview(); as document) {
+      <wo-markdown [content]="document.content" />
+    }
+  </div>
+  <div class="tm-dialog-actions">
+    <button type="button" (click)="closePreview()">Close</button>
+  </div>
+</dialog>
