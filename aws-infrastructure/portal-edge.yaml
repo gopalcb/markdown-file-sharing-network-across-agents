@@ -1,0 +1,203 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Short HTTPS CloudFront hostname for the existing Work Organizer portal.
+Parameters:
+  DocumentApiOriginHost:
+    Type: String
+    AllowedPattern: '[a-z0-9]+\.execute-api\.ca-central-1\.amazonaws\.com'
+    Description: Document HTTP API hostname, without scheme or path.
+  UiBucketDomain:
+    Type: String
+    Default: ''
+    AllowedPattern: '(^$|[a-z0-9.-]+\.s3\.ca-central-1\.amazonaws\.com)'
+  ApiOriginHost:
+    Type: String
+    Default: ''
+    AllowedPattern: '(^$|[a-z0-9]+\.execute-api\.ca-central-1\.amazonaws\.com)'
+  AuthConnectOrigins:
+    Type: String
+    Default: "https://cognito-idp.ca-central-1.amazonaws.com https://ca-central-1yxctjkchu.auth.ca-central-1.amazoncognito.com"
+    AllowedPattern: 'https://cognito-idp\.ca-central-1\.amazonaws\.com https://[a-z0-9-]+\.auth\.ca-central-1\.amazoncognito\.com'
+Resources:
+  StaticCache:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: softrobots-portal-static
+        MinTTL: 0
+        DefaultTTL: 0
+        MaxTTL: 31536000
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingGzip: true
+          EnableAcceptEncodingBrotli: true
+          HeadersConfig: {HeaderBehavior: none}
+          CookiesConfig: {CookieBehavior: none}
+          QueryStringsConfig: {QueryStringBehavior: none}
+  UiOriginAccess:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: softrobots-portal-ui
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+  ServerlessHeaders:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: softrobots-portal-serverless-security
+        SecurityHeadersConfig:
+          ContentSecurityPolicy:
+            Override: true
+            ContentSecurityPolicy: !Sub "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ${AuthConnectOrigins}; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';"
+          ContentTypeOptions: {Override: true}
+          FrameOptions: {FrameOption: DENY, Override: true}
+          ReferrerPolicy: {ReferrerPolicy: no-referrer, Override: true}
+          StrictTransportSecurity: {AccessControlMaxAgeSec: 31536000, Override: true}
+        CustomHeadersConfig:
+          Items:
+            - Header: Permissions-Policy
+              Value: camera=(), microphone=(), geolocation=()
+              Override: true
+  ServerlessRequest:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: softrobots-portal-serverless-request
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Preserve exact API boundaries and rewrite only portal SPA routes.
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          var uri = request.uri;
+          if (uri === '/api' || uri.indexOf('/api/') === 0) {
+            var keep = ['host', 'content-length', 'transfer-encoding', 'via', 'authorization', 'x-device-id', 'origin', 'x-csrf-token', 'accept', 'content-type'];
+            Object.keys(request.headers).forEach(function (name) {
+              if (keep.indexOf(name) < 0) delete request.headers[name];
+            });
+            var cookie = request.cookies['__Host-wo-session'];
+            request.cookies = {};
+            if (cookie && /^[A-Za-z0-9_-]{43}$/.test(cookie.value)) request.cookies['__Host-wo-session'] = {value: cookie.value};
+            return request;
+          }
+          if ((request.method === 'GET' || request.method === 'HEAD') &&
+              (uri === '/' || uri === '/work-organizer' || uri.indexOf('/work-organizer/') === 0) &&
+              uri.indexOf('.') < 0) {
+            request.uri = '/index.html';
+          }
+          return request;
+        }
+  PortalDistribution:
+    Type: AWS::CloudFront::Distribution
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Tags:
+        - Key: Project
+          Value: softrobots-portal-edge
+      DistributionConfig:
+        Comment: Work Organizer portal served by private S3 and telemetry-lambda
+        Enabled: true
+        IPV6Enabled: true
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+        Origins:
+          - Id: portal-static
+            DomainName: !Ref UiBucketDomain
+            OriginAccessControlId: !Ref UiOriginAccess
+            S3OriginConfig: {OriginAccessIdentity: ''}
+          - Id: portal-api
+            DomainName: !Ref ApiOriginHost
+            CustomOriginConfig:
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+          - Id: document-api
+            DomainName: !Ref DocumentApiOriginHost
+            CustomOriginConfig:
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+        CacheBehaviors:
+          - PathPattern: /documents
+            TargetOriginId: document-api
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+            CachedMethods: [GET, HEAD]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+          - PathPattern: /browser-documents
+            TargetOriginId: document-api
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+            CachedMethods: [GET, HEAD]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+          - PathPattern: /api/*
+            TargetOriginId: portal-api
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+            CachedMethods: [GET, HEAD]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+            ResponseHeadersPolicyId: !Ref ServerlessHeaders
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt ServerlessRequest.FunctionARN
+          - PathPattern: /api
+            TargetOriginId: portal-api
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+            CachedMethods: [GET, HEAD]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+            ResponseHeadersPolicyId: !Ref ServerlessHeaders
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt ServerlessRequest.FunctionARN
+        DefaultCacheBehavior:
+          TargetOriginId: portal-static
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # Never cache tokens, configuration, private API responses or callback pages.
+          CachePolicyId: !Ref StaticCache
+          ResponseHeadersPolicyId: !Ref ServerlessHeaders
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt ServerlessRequest.FunctionARN
+        CustomErrorResponses:
+          - ErrorCode: 400
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 403
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 404
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 405
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 414
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 416
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 500
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 501
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 502
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 503
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 504
+            ErrorCachingMinTTL: 0
+Outputs:
+  PortalUrl:
+    Value: !Sub 'https://${PortalDistribution.DomainName}'
+  DistributionId:
+    Value: !Ref PortalDistribution
+  DocumentUploadUrl:
+    Value: !Sub 'https://${PortalDistribution.DomainName}/documents'
+  BrowserDocumentUploadUrl:
+    Value: !Sub 'https://${PortalDistribution.DomainName}/browser-documents'

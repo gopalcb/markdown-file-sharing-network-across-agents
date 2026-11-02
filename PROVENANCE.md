@@ -1,13 +1,25 @@
-# Source and extraction
+# Source and refresh
 
-Extracted from [gopalcb/gb-systems-and-agents](https://github.com/gopalcb/gb-systems-and-agents), source commit `ef9daa434b9a046e3e752bbfd0b719d46e729f3a`.
+The original standalone extraction came from
+[gopalcb/gb-systems-and-agents](https://github.com/gopalcb/gb-systems-and-agents)
+commit `ef9daa434b9a046e3e752bbfd0b719d46e729f3a`.
 
-The allowlist contains the `work-organizer-portal/aws-infrastructure/document-api/` runtime, tests, scripts and scoped IAM examples; focused Cognito upload/session resources from `auth.yaml` and `username-auth.yaml`; the single required `session_device_service.py` module from the source backend; and four optional native client dependency files (`cognito_auth.py`, `native_session.py`, `device_signing.py`, `mac_device_key.swift`) from the Work Organizer skill. Those copied modules contain implementation only; no saved identity, key, token, device registry, or Keychain export is included.
+On 2026-11-02 it was replaced with the current consolidated application source
+from Softrobots commit `8c11a24ccd4bc3767389896b49ff583d4b18b101`.
+The allowlist contains the Angular application, Flask/FastMCP/Lambda runtime,
+document storage implementation, CDK and retained CloudFormation source, formatting
+scripts, dependency manifests, system/CDK/browser tests, architecture/code map, and
+the focused Telemetry document-delivery skill from reviewed commit `6198eb2`.
 
-The new root README, architecture, code map, license, validation workflow, requirements manifest, and offline smoke script are standalone publication material. Original deployment workflows and IAM policies embedded in the source auth stacks were excluded. Public template issuer/client constraints are now deployment parameters; the hosted-login domain and SES settings are explicit parameters. CloudFront outputs and production upload defaults were removed. Original account/pool/client examples were replaced with fictitious examples. Existing `softrobots-*` resource names and source API/service names remain for compatibility.
+The source deployment workflow was deliberately excluded. This repository keeps a
+validation-only workflow with no OIDC permission and no AWS deployment job. The
+restored Softrobots historical `docs/`, generated `doc/` interactions, local watcher
+runtime, native sessions, Keychain material, environment files, credentials, build
+outputs, deployment receipts, and source Git history were not copied.
 
-Runtime tests were retained. Assertions tied to source GitHub deployment ordering and portal-edge configuration were adapted to verify standalone validation-only CI and the absence of CloudFront resources. Source workflow assertions for project-table bootstrapping were replaced with local table/template checks; runtime table-retention, encryption, approval policy, replay, upload, read, and client boundary tests remain. This repository makes no claims about the source deployment state.
-
-Excluded: portal frontends, portal backend application, design themes, ECS/CloudFront UI infrastructure, MCP server implementation, `.codex`, source AGENTS/workflow records, task and interaction logs, watcher implementation/runtime state, historical documents/data, environment files, credentials, build outputs, and all source Git history.
+The existing infrastructure names and deployment-specific references remain in
+source because they are part of the current tested topology. Their presence is not
+evidence of a deployment from this repository, and the validation workflow cannot
+mutate AWS.
 
 Copyright 2026 Gopal C Bala. Published under MIT.

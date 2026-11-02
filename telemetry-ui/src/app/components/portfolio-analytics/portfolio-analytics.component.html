@@ -1,0 +1,228 @@
+<wo-card>
+  <section
+    class="wo-stack"
+    aria-label="GH Portfolio analytics"
+    [attr.aria-busy]="loading() || deleting()"
+  >
+    <div class="tm-titlebar portfolio-report-toolbar">
+      <h2 #reportHeading class="tm-heading" tabindex="-1">GH Portfolio</h2>
+      <div class="tm-document-search portfolio-report-search">
+        <input
+          #searchInput
+          type="search"
+          aria-label="Search portfolio activities"
+          placeholder="Search activities…"
+          [value]="query()"
+          [disabled]="deleting()"
+          (input)="search($any($event.target).value)"
+        />
+        @if (query()) {
+          <button
+            class="portfolio-search-clear"
+            type="button"
+            aria-label="Clear activity search"
+            [disabled]="deleting()"
+            (click)="clearSearch()"
+          >
+            ×
+          </button>
+        }
+      </div>
+      <button
+        #deleteButton
+        type="button"
+        class="tm-danger portfolio-delete"
+        [disabled]="!selected().size || loading() || deleting() || reconcileRequired()"
+        (click)="requestDelete()"
+      >
+        Delete records ({{ selected().size }})
+      </button>
+    </div>
+    <div class="wo-actions portfolio-report-summary">
+      <p class="wo-muted" aria-live="polite">
+        {{ activities().length }} activities · {{ visitorCount() }} sessions ·
+        {{ events().length }} events
+      </p>
+      <button
+        type="button"
+        class="wo-button--secondary"
+        [disabled]="loading() || deleting()"
+        (click)="refresh()"
+      >
+        Refresh
+      </button>
+    </div>
+    <p class="wo-muted">
+      {{ timezone }} · Approximate locations · Anonymous sessions share a colour. Clicks and page
+      loads within 10 seconds may be combined. Selection covers this page only.
+    </p>
+    @if (asOf()) {
+      <p class="wo-muted">
+        As of {{ asOf() | date: 'medium' : undefined }} · Retained up to 90 days.
+      </p>
+    }
+    @if (notice()) {
+      <p role="status">{{ notice() }}</p>
+    }
+    @if (reconcileRequired()) {
+      <p class="error-text" role="alert">{{ deleteError() }}</p>
+    }
+    @if (loading()) {
+      <div role="status">
+        <wo-spinner label="Loading analytics" /> <span>{{ receivedCount() }} events received</span>
+      </div>
+    }
+    @if (error()) {
+      <div role="alert">
+        <p class="error-text">{{ error() }}</p>
+        <button type="button" [disabled]="deleting() || reconcileRequired()" (click)="retry()">
+          Retry
+        </button>
+      </div>
+    }
+    @if (!loading()) {
+      @if (nextCursor() && !error()) {
+        <div class="wo-actions">
+          <p class="wo-muted">
+            More retained data is available. Current totals cover loaded events.
+          </p>
+          <button
+            type="button"
+            class="wo-button--secondary"
+            [disabled]="deleting() || reconcileRequired()"
+            (click)="continueLoading()"
+          >
+            Continue loading
+          </button>
+        </div>
+      }
+      @if (filtered().length) {
+        <div
+          class="portfolio-report-table"
+          tabindex="0"
+          role="region"
+          aria-label="Portfolio activity table"
+        >
+          <table>
+            <caption class="wo-visually-hidden">
+              GH Portfolio visitor activity, newest first
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col" class="portfolio-selection">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all activities on this page"
+                    [checked]="allSelected()"
+                    [indeterminate]="someSelected()"
+                    [disabled]="deleting()"
+                    (change)="selectPage($any($event.target).checked)"
+                  />
+                </th>
+                <th scope="col">Visitor</th>
+                <th scope="col">Visited</th>
+                <th scope="col">Location</th>
+                <th scope="col">Activity</th>
+                <th scope="col">Page</th>
+                <th scope="col">Remark</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of displayed(); track row.id) {
+                <tr [style.background-color]="row.colour">
+                  <td class="portfolio-selection">
+                    <input
+                      type="checkbox"
+                      [attr.aria-label]="
+                        'Select ' + row.visitor + ': ' + row.activity + ' on ' + row.page
+                      "
+                      [checked]="selected().has(row.id)"
+                      [disabled]="deleting()"
+                      (change)="selectRow(row.id, $any($event.target).checked)"
+                    />
+                  </td>
+                  <th scope="row">{{ row.visitor }}</th>
+                  <td>
+                    <time [attr.datetime]="row.visitedAt">{{
+                      row.visitedAt | date: 'medium'
+                    }}</time>
+                  </td>
+                  <td>{{ row.location }}</td>
+                  <td>{{ row.activity }}</td>
+                  <td>{{ row.page }}</td>
+                  <td>{{ row.remark }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="wo-actions" aria-label="Activity pagination">
+          <button
+            type="button"
+            class="wo-button--secondary"
+            [disabled]="pageIndex() === 0 || deleting()"
+            (click)="movePage(-1)"
+          >
+            Previous
+          </button>
+          <span aria-live="polite"
+            >Page {{ pageIndex() + 1 }} of {{ pageCount() }} · {{ filtered().length }} matching
+            activities</span
+          >
+          <button
+            type="button"
+            class="wo-button--secondary"
+            [disabled]="pageIndex() + 1 >= pageCount() || deleting()"
+            (click)="movePage(1)"
+          >
+            Next
+          </button>
+        </div>
+      } @else if (!error()) {
+        <p class="wo-muted">
+          {{
+            query()
+              ? 'No activities match this search.'
+              : 'No portfolio activity has been recorded yet.'
+          }}
+        </p>
+      }
+    }
+  </section>
+</wo-card>
+<dialog
+  #deleteDialog
+  class="tm-dialog"
+  aria-labelledby="delete-analytics-title"
+  aria-describedby="delete-analytics-description"
+  (cancel)="$event.preventDefault(); closeDelete()"
+>
+  <h2 id="delete-analytics-title">Delete portfolio records?</h2>
+  <p id="delete-analytics-description">
+    Delete {{ pendingActivityCount() }}
+    {{ pendingActivityCount() === 1 ? 'activity' : 'activities' }} ({{ pendingRecordCount() }}
+    {{ pendingRecordCount() === 1 ? 'record' : 'records' }})? This permanently removes the
+    selected analytics records and cannot be undone.
+  </p>
+  @if (deleting()) {
+    <wo-spinner label="Deleting portfolio records" />
+  }
+  @if (deleteError()) {
+    <p class="tm-error" role="alert">{{ deleteError() }}</p>
+  }
+  <div class="tm-dialog-actions">
+    <button type="button" autofocus [disabled]="deleting()" (click)="closeDelete()">Cancel</button>
+    @if (reconcileRequired()) {
+      <button type="button" (click)="refresh()">Refresh report</button>
+    } @else {
+      <button
+        type="button"
+        class="tm-danger portfolio-delete-confirm"
+        [disabled]="deleting()"
+        (click)="confirmDelete()"
+      >
+        Delete records
+      </button>
+    }
+  </div>
+</dialog>

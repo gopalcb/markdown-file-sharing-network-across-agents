@@ -1,7 +1,25 @@
-.venv*/
+.venv/
+node_modules/
+dist/
+.angular/
+.agent-local/
 __pycache__/
-*.py[cod]
 .pytest_cache/
+.ruff_cache/
+doc/
+*.pyc
 .env
-*.zip
+.deployment/
+cdk.out/
 .DS_Store
+test-results/
+playwright-report/
+
+# Generated Lambda packages and local tooling
+build/
+*.zip
+.env.*
+*.pem
+
+# Generated nonsecret local authentication configuration
+telemetry-ui/public/auth-config.json

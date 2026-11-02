@@ -1,0 +1,20 @@
+project: repository-formatting-tools
+files:
+  format_python.py:
+    purpose: Apply or check standard Python formatting and logical whitespace.
+    functions:
+      separate_steps: {summary: Insert whitespace using AST statement positions without changing tokens.}
+      source_files: {summary: Select portal and tooling Python outside generated or environment directories.}
+      main: {summary: Run Ruff then apply or verify logical whitespace.}
+  format-web.mjs:
+    purpose: Format portal and theme TypeScript without compact control bodies.
+    functions:
+      sourceFiles: {summary: Collect maintained TypeScript files recursively.}
+      applyEdits: {summary: Insert syntax-aware edits in descending source order.}
+      expandControlBodies: {summary: Add blocks around single-statement control bodies.}
+      separateSteps: {summary: Separate logical statements while retaining comments and literals.}
+      main: {summary: Apply or check Prettier and logical whitespace.}
+  tests/test_format_python.py:
+    purpose: Verify AST equivalence, literal preservation and formatter idempotence.
+  tests/format-web.test.mjs:
+    purpose: Verify nested control-flow behavior, literal preservation and idempotence.

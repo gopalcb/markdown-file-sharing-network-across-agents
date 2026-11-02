@@ -1,0 +1,40 @@
+<form [formGroup]="form" (ngSubmit)="submit()" class="wo-stack" novalidate>
+  <div class="wo-grid">
+    <wo-text-input
+      class="wo-col-md-6"
+      [inputId]="prefix + '-name'"
+      label="Name"
+      [control]="form.controls.name"
+      [required]="true"
+      [submitted]="submitted()"
+      hint="3–80 characters. Give this work a clear name."
+      placeholder="Plan the weekly review"
+    />
+    <wo-text-input
+      class="wo-col-md-6"
+      [inputId]="prefix + '-email'"
+      label="Owner email"
+      type="email"
+      autocomplete="email"
+      [control]="form.controls.email"
+      [required]="true"
+      [submitted]="submitted()"
+      hint="Use a valid email address."
+      placeholder="name@example.com"
+    />
+  </div>
+  <div class="wo-actions">
+    <button type="submit">
+      <wo-icon name="plus" />
+      {{ preview ? 'Validate preview' : 'Add work item' }}</button
+    ><button type="button" class="wo-button--secondary" (click)="reset()">Reset form</button>
+  </div>
+  <p
+    role="status"
+    aria-live="polite"
+    class="form-message"
+    [class.error-text]="submitted() && form.invalid"
+  >
+    {{ message() }}
+  </p>
+</form>

@@ -1,0 +1,17 @@
+<wo-card heading="API connection" eyebrow="Workspace health">
+  <div class="status-content" role="status" aria-live="polite">
+    @if (state() === 'loading') {
+      <p><wo-spinner [announce]="false" /> Checking connection…</p>
+    } @else if (state() === 'ready') {
+      <p class="status-label"><wo-icon name="check" /> API is online</p>
+      <p class="wo-muted">The backend service is healthy and ready.</p>
+    } @else {
+      <p class="error-text">Unable to connect</p>
+      <p class="wo-muted">We couldn’t confirm the API status. Try again in a moment.</p>
+    }
+  </div>
+  <button type="button" (click)="refresh()" [disabled]="state() === 'loading'">
+    <wo-icon name="refresh" />
+    {{ state() === 'error' ? 'Try again' : state() === 'loading' ? 'Checking…' : 'Refresh status' }}
+  </button>
+</wo-card>

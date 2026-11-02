@@ -1,717 +1,197 @@
-project: markdown-file-sharing-network-across-agents
-files:
-  aws-infrastructure/document-api/scripts/approve_device.py:
-    purpose: Inspect or explicitly approve/revoke one pending native key in main-only
-      CI.
+project: softrobots-telemetry
+runtime:
+  telemetry-ui/src/app:
+    purpose: Angular routes, components, services, guards and interfaces.
+  telemetry-ui/src/theme:
+    purpose: Application-owned design tokens and Angular primitives.
+  telemetry-api/app.py:
+    purpose: Create the fail-closed Flask application used by telemetry-lambda.
     functions:
-      validate_ci_session:
-        summary: Require the dedicated account, region and main-branch GitHub OIDC
-          role.
-      preflight_permissions:
-        summary: Fail closed unless scoped runtime and provisioner grants are already
-          effective.
-      inspect_pending:
-        summary: Read and cryptographically validate the exact enrollment selected
-          by an operator.
-      change_approval:
-        summary: Inspect enrollment and write only the operator's exact approved or
-          revoked key.
-      install_approval_policy:
-        summary: Install only the reviewed named managed policy; reject unexpected
-          existing contents.
-      main:
-        summary: Run IAM preflight or one explicitly selected administrative device
-          operation.
-  aws-infrastructure/document-api/scripts/client/cognito_auth.py:
-    purpose: Authenticate privately with transient access tokens and optional Keychain
-      refresh persistence.
+      create_app: Validate configuration and register portal routes and middleware.
+  telemetry-api/server.py:
+    purpose: Dispatch Flask and FastMCP OAuth/protocol paths in one ASGI process.
     functions:
-      CognitoSession.invalidate:
-        summary: Discard the in-memory session after rejection or an uncertain refresh.
-      CognitoSession.credentials:
-        summary: Refresh before expiry with rotation support; never reuse an uncertain
-          refresh.
-      email_otp_login:
-        summary: Complete one email challenge privately without fallback or automatic
-          resend.
-      login:
-        summary: Prompt privately for the selected email-code or legacy password sign-in
-          flow.
-      device_headers:
-        summary: Read/create a private nonsecret installation ID and report a usable
-          MAC if available.
-  aws-infrastructure/document-api/scripts/client/device_signing.py:
-    purpose: Sign native requests with an explicitly selected macOS key and store
-      sessions in Keychain.
+      TelemetryApplication: Dispatch MCP-owned ASGI paths and portal WSGI paths.
+      create_app: Build the combined portal and MCP application.
+  telemetry-api/routing.py:
+    purpose: Route authenticated portal HTTP requests to domain services.
     functions:
-      private_directory:
-        summary: Require an owned private directory; never follow a substituted state
-          directory.
-      credential_lock:
-        summary: Serialize credential read/refresh/logout across project runtimes
-          on this Mac.
-      helper_path:
-        summary: Compile once per source version, outside document trees; never compile
-          per upload.
-      native:
-        summary: Use private pipes; callers must never log captured output or supplied
-          credentials.
-      credential_id:
-        summary: Namespace saved credentials by region, client and explicit sign-in
-          name.
-      signed_headers:
-        summary: Bind the exact request bytes and identity credential to fresh device
-          proof.
-  aws-infrastructure/document-api/scripts/client/native_session.py:
-    purpose: Resume native Cognito sessions from device-local Keychain without extending
-      their deadline.
+      protect_api: Authenticate protected portal requests and bind their device.
+      private_api_response: Prevent caching of protected responses.
+      health: Return process readiness.
+      current_user: Return the verified portal identity.
+      portfolio_analytics: Validate and read or delete protected portfolio analytics.
+      not_found: Return a machine-readable route error.
+      read_documents: Read one document or document page.
+      browser_dependencies: Create browser-session AWS clients lazily.
+      browser_session: Create or restore a browser session.
+      browser_logout: Revoke a browser session.
+      portal_documents: Dispatch portal document, project, and task commands.
+  telemetry-api/services/authentication_service.py:
+    purpose: Own portal JWT, browser-session, and fixed device-binding behavior.
     functions:
-      token_identity:
-        summary: Read claims only from Cognito TLS responses; the upload API verifies
-          JWT signatures.
-      cognito_client:
-        summary: Use the public regional AWS endpoint without ambient credential/endpoint
-          overrides.
-      PersistentSession.__init__:
-        summary: Bind a process session to one explicitly selected Keychain account.
-      PersistentSession.credentials:
-        summary: Check durable logout state and serialize refresh without extending
-          auth_time.
-      PersistentSession.forget_rejected_session:
-        summary: Delete only the matching generation while the caller holds its credential
-          lock.
-      PersistentSession.invalidate:
-        summary: Forget only this rejected login, never a newer login by another project.
-      PersistentSession.close:
-        summary: Release process memory while retaining the valid saved sign-in on
-          normal stop.
-      remember_session:
-        summary: Save only after a human login and require hardware key creation without
-          software fallback.
-      resume_session:
-        summary: Read only the explicitly selected account; background processes never
-          prompt.
-      logout_saved:
-        summary: Delete locally before remote revocation; report failure rather than
-          claim full logout.
-  aws-infrastructure/document-api/scripts/configure_storage_permissions.py:
-    purpose: Apply scoped document storage and project table grants through GitHub
-      deployment.
+      BrowserSessionService: Bundle browser session clients, configuration, and keys.
+      AuthenticationError: Represent failed authentication.
+      AuthorizationError: Represent missing portal authorization.
+      validate_session_age: Enforce the fixed 90-day authentication deadline.
+      validate_auth_config: Validate portal Cognito configuration.
+      validate_access_claims: Validate client, token-use, group, and time claims.
+      fetch_jwks: Fetch a bounded Cognito signing-key document.
+      JwksCache: Cache and safely rotate portal signing keys.
+      verify_access_token: Verify and authorize a portal access token.
+      session_record: Bind a signed refresh family to reported device metadata.
+      check_device: Register or require an existing device binding.
+      session_key: Hash an opaque browser cookie.
+      verify_session_identity: Preserve identity across access-token refresh.
+      create_browser_session: Exchange and persist one browser refresh credential.
+      read_browser_session: Read a valid device-bound browser session.
+      authenticate_browser_session: Refresh and authenticate a browser session.
+      validate_cookie_mutation: Enforce browser origin and CSRF protection.
+      revoke_browser_session: Tombstone the local session and revoke upstream.
+      browser_session_response: Project safe browser-session fields.
+  telemetry-api/services/analytics_service.py:
+    purpose: Validate, read, and delete bounded portfolio analytics records.
     functions:
-      configure_storage_permissions:
-        summary: Verify GitHub identity, add only owned storage policies and read
-          them back.
-      main:
-        summary: Run the guarded additive IAM update only inside GitHub Actions.
-  aws-infrastructure/document-api/scripts/prepare_artifact_bucket.py:
-    purpose: Prepare the dedicated private artifact bucket using the CI/CD role only.
+      validate_analytics_query: Validate a caller-supplied analytics cursor.
+      validate_analytics_delete: Validate bounded public event identities.
+      normalize_event: Project safe event and visitor display fields.
+      read_portfolio_events: Read one fixed-table analytics page.
+      portfolio_event_identity: Derive a public identity from a stored event.
+      resolve_portfolio_event_keys: Resolve public identities to exact private keys.
+      delete_portfolio_events: Atomically delete resolved selected events.
+  telemetry-api/services/native_upload_service.py:
+    purpose: Verify native API Gateway requests and preserve signed upload bytes.
     functions:
-      prepare_bucket:
-        summary: Verify the deployment identity, then create/secure only the named
-          artifact bucket.
-      main:
-        summary: Use the existing short-lived OIDC session; print only the verified
-          bucket name.
-  aws-infrastructure/document-api/scripts/resolve_auth_config.py:
-    purpose: Resolve upload deployment settings from the existing, activated auth
-      stack.
+      native_event: Reconstruct a verified Lambda upload event.
+      native_upload: Execute native ingestion and return its exact receipt.
+  telemetry-api/mcp_api/app.py:
+    purpose: Build the authenticated stateless Markdown MCP application.
     functions:
-      resolve_config:
-        summary: Require the approved CI target and completed auth stack before returning
-          settings.
-      resolve_browser_config:
-        summary: Read the completed username stack without changing the existing upload
-          issuer.
-      main:
-        summary: Write validated public identifiers to the GitHub environment after
-          successful reads.
-  aws-infrastructure/document-api/scripts/upload.py:
-    purpose: Upload Markdown with Cognito credentials entered privately by the human
-      operator.
+      ProtocolLogFilter: Remove sensitive protocol diagnostics.
+      configure_protocol_logging: Install sanitized protocol log handlers.
+      create_app: Build discovery, OAuth, ingress, and MCP tool routes.
+  telemetry-api/mcp_api/auth_service.py:
+    purpose: Verify MCP tokens and bound ASGI protocol and OAuth ingress.
     functions:
-      NoRedirect.redirect_request:
-        summary: Reject every redirect, including redirects to the same host.
-      send_upload:
-        summary: Send an access token over HTTPS without redirects or automatic write
-          retries.
-      main:
-        summary: Collect credentials only in the operator process; report sanitized
-          failures.
-  aws-infrastructure/document-api/src/app.py:
-    purpose: Lambda boundary for native ingestion and trusted portal document/task
-      operations.
+      verify_access_token: Verify one Cognito MCP access token.
+      IngressMiddleware: Authenticate, rate-limit, and bound MCP requests.
+      OAuthIngressMiddleware: Protect and sanitize OAuth requests and responses.
+  telemetry-api/mcp_api/oauth_service.py:
+    purpose: Bridge Cognito OAuth and persist encrypted single-use state.
     functions:
-      lambda_handler:
-        summary: Validate ingestion or trusted reads, then return a sanitized proxy
-          response.
-  aws-infrastructure/document-api/src/services/__init__.py:
-    purpose: Document validation, storage, indexing and operational logging services.
-    functions: {}
-  aws-infrastructure/document-api/src/services/deletion_service.py:
-    purpose: Record immutable local deletion observations for future review, without
-      S3 access.
+      OAuthStateStore: Persist encrypted OAuth state and atomic claims in DynamoDB.
+      CognitoVerifier: Adapt Cognito tokens to FastMCP access tokens.
+      MarkdownOAuthProxy: Enforce redirect, redemption, refresh, and revocation rules.
+      create_oauth: Build the configured Cognito OAuth proxy.
+  telemetry-api/mcp_api/storage_service.py:
+    purpose: Adapt MCP upload batches to shared document storage.
     functions:
-      record_deletion:
-        summary: Conditionally insert one owner-bound observation; identical retries
-          never reset review.
-  aws-infrastructure/document-api/src/services/document_read_service.py:
-    purpose: Read READY document summaries and bounded private Markdown for the portal.
+      write_documents: Store one prepared batch with bounded AWS clients.
+      save_batch: Return truthful READY and incomplete MCP receipts.
+  telemetry-api/mcp_api/validation_service.py:
+    purpose: Validate MCP deployment settings, redirects, and Markdown batches.
     functions:
-      summarize_document:
-        summary: Expose library fields without storage locations, metadata or request
-          IDs.
-      list_documents:
-        summary: Evaluate at most one bounded DynamoDB page and return only READY
-          entries.
-      get_document:
-        summary: Load an authorized READY row and read at most 256 KiB of UTF-8 content.
-  aws-infrastructure/document-api/src/services/document_service.py:
-    purpose: Coordinate independent latest-file uploads and truthful per-file batch
-      outcomes.
+      Metadata: Validate bounded Markdown metadata.
+      MarkdownFile: Validate one Markdown file.
+      UploadBatch: Validate one personal upload batch.
+      prepare_payload: Validate complete batch bytes and destinations.
+      load_config: Load and validate enabled MCP configuration.
+      valid_oauth_redirect: Allow only approved ChatGPT and local callback URIs.
+  telemetry-api/document_api/handler.py:
+    purpose: Coordinate validated document commands across the two storage services.
     functions:
-      store_documents:
-        summary: Continue after individual failures; READY requires object and index
-          acknowledgement.
-  aws-infrastructure/document-api/src/services/document_storage_service.py:
-    purpose: Translate compact index records to owner-scoped S3 locations and publish
-      metadata.
+      proxy_response: Build a private no-store Lambda proxy response.
+      execute_documents: Execute and sanitize one local portal command.
+      lambda_handler: Route native and trusted portal operations.
+  telemetry-api/document_api/dynamodb_document_service.py:
+    purpose: Own document metadata, task, project, device and deletion persistence.
     functions:
-      source_binding:
-        summary: Bind an occupied canonical path to its original source/project without
-          storing raw metadata.
-      storage_path:
-        summary: Build a plain S3 URI without revision or query parameters.
-      storage_location:
-        summary: Resolve compact or legacy rows, rejecting foreign buckets and owner
-          prefixes.
-      publish_record:
-        summary: Publish acknowledged bytes, preserving concurrent human task edits
-          and creation date.
-  aws-infrastructure/document-api/src/services/logging_service.py:
-    purpose: Emit structured operational events without document bodies or metadata.
+      DocumentConflict: Represent a stale document or task revision.
+      ProjectExists: Represent a conflicting normalized project name.
+      DeletionConflict: Represent a conflicting deletion observation.
+      encode_cursor: Encode a caller-bound continuation key.
+      get_ready_record: Read one authorized ready index row.
+      publish_record: Publish compact acknowledged metadata.
+      document_summary: Project public document metadata.
+      list_documents: Read one bounded document page.
+      list_folders: Read owner-scoped document groups.
+      plan_task: Derive task metadata from plan Markdown.
+      task_summary: Project public linked-task metadata.
+      list_tasks: Read one bounded linked-task page.
+      update_task: Conditionally update linked task metadata.
+      project_summary: Project public project metadata.
+      list_projects: Read one bounded shared project page.
+      create_project: Conditionally create an idempotent project.
+      authorize_native_device: Consume a nonce and enforce device approval.
+      record_deletion: Record an immutable deletion observation.
+  telemetry-api/document_api/s3_document_service.py:
+    purpose: Own Markdown object locations, writes, reads and edits.
     functions:
-      log_event:
-        summary: Write only identifiers and safe error types to Lambda's CloudWatch
-          stream.
-  aws-infrastructure/document-api/src/services/native_device_service.py:
-    purpose: Enforce administrator-approved native keys and one-use signed request
-      nonces.
+      DocumentStorage: Bundle document table, S3 client, and allowed buckets.
+      source_binding: Bind an object path to its source project.
+      storage_path: Build a plain S3 URI.
+      storage_location: Resolve and validate compact storage metadata.
+      legacy_storage_location: Validate expanded legacy storage metadata.
+      store_path_document: Store one stable owner-path document.
+      store_documents: Store a batch with truthful per-file outcomes.
+      read_document: Read one authorized bounded Markdown object.
+      replace_document: Replace current bytes conditionally by ETag.
+      get_task: Return task metadata with its Markdown description.
+      execute_portal: Dispatch validated portal storage operations.
+  telemetry-api/document_api/validation.py:
+    purpose: Validate upload, read, deletion, path and native-proof contracts.
     functions:
-      authorize_native_device:
-        summary: Consume a fresh proof and require approval, or record immutable enrollment.
-  aws-infrastructure/document-api/src/services/path_document_service.py:
-    purpose: Store latest Markdown bytes at a stable owner/path identity without S3
-      versions.
+      validate_event: Validate and normalize native upload JSON.
+      validate_relative_path: Normalize a safe project-relative Markdown path.
+      path_document_identity: Derive stable file identity and S3 key from a path.
+      validate_deletion: Validate an immutable deletion observation.
+      validate_read_event: Validate trusted read and pagination commands.
+      validate_upload_identity: Bind signed gateway identity to upload content.
+      validate_native_proof: Verify the native device signature and nonce.
+      validate_file_group: Validate a bounded storage group segment.
+  telemetry-api/document_api/portal_validation.py:
+    purpose: Validate trusted portal document, project, and task commands.
     functions:
-      store_path_document:
-        summary: Overwrite one canonical path, retaining stable identity and independently
-          edited tasks.
-  aws-infrastructure/document-api/src/services/portal_document_service.py:
-    purpose: Execute validated portal uploads, folder browsing and conditional latest-file
-      edits.
+      validate_project_event: Validate project commands and identity-bound cursors.
+      validate_portal_event: Validate trusted portal storage commands.
+  telemetry-api/document_api/portal_contract.py:
+    purpose: Bind browser requests to verified identity and sanitize responses.
     functions:
-      list_folders:
-        summary: Browse one index page of owned partitions without granting S3 bucket
-          enumeration.
-      replace_document:
-        summary: Conditionally replace current bytes using S3 ETag, without storing
-          a revision ID.
-      execute_portal:
-        summary: Dispatch only validated trusted commands and keep per-file upload
-          outcomes explicit.
-  aws-infrastructure/document-api/src/services/portal_validation_service.py:
-    purpose: Validate trusted portal document mutations and linked-task commands before
-      storage.
-    functions:
-      validate_portal_event:
-        summary: Reject HTTP dispatch and caller-controlled ownership, validating
-          all mutation fields.
-  aws-infrastructure/document-api/src/services/project_service.py:
-    purpose: Store a shared portal project catalog in its dedicated retained DynamoDB
-      table.
-    functions:
-      project_summary:
-        summary: Return only the public project contract, never internal table fields.
-      list_projects:
-        summary: Read one bounded shared catalog page with a caller-bound continuation
-          cursor.
-      create_project:
-        summary: Atomically create a unique normalized name; identical owner retries
-          are idempotent.
-  aws-infrastructure/document-api/src/services/project_validation_service.py:
-    purpose: Validate trusted project catalog operations and identity-bound pagination
-      cursors.
-    functions:
-      validate_project_event:
-        summary: Validate the complete command before any table read or conditional
-          project creation.
-  aws-infrastructure/document-api/src/services/task_service.py:
-    purpose: Persist linked plan task metadata within the existing document index
-      record.
-    functions:
-      plan_task:
-        summary: Recognize explicit plan metadata/frontmatter or a descriptive plan
-          basename.
-      task_summary:
-        summary: Expose only public task metadata and the verified ownership edit
-          capability.
-      list_tasks:
-        summary: Read one bounded index page; omit unfinished documents and unrelated
-          records.
-      get_task:
-        summary: Read the linked plan Markdown unless the task has an independent
-          edited description.
-      update_task:
-        summary: Conditionally edit task metadata without changing source Markdown
-          or other fields.
-  aws-infrastructure/document-api/src/services/validation_service.py:
-    purpose: Validate HTTP bodies and document paths before any storage operation.
-    functions:
-      validate_event:
-        summary: Decode and validate a bounded JSON upload, returning normalized files.
-      validate_relative_path:
-        summary: Validate a bounded S3-safe Markdown path and strip only one leading
-          docs/.
-      path_document_identity:
-        summary: Derive stable owner/path identity independent of classification or
-          file contents.
-      validate_deletion:
-        summary: Validate bounded observation metadata without granting authority
-          over remote objects.
-      validate_read_event:
-        summary: Validate trusted direct read commands and a scope-bound opaque cursor.
-      validate_upload_identity:
-        summary: Bind storage ownership to claims verified by the API Gateway JWT
-          authorizer.
-      validate_native_proof:
-        summary: Verify a bounded P256 request signature and return its identity-bound
-          registry key.
-      validate_file_group:
-        summary: Require one bounded safe group segment, including caller-defined
-          groups.
-  aws-infrastructure/document-api/src/session_device_service.py:
-    purpose: Bind verified Cognito refresh families to reported devices with a fixed
-      deadline.
-    functions:
-      validate_session_age:
-        summary: Enforce the original 90-day boundary; transport adapters normalize
-          types first.
-      session_record:
-        summary: Validate reported metadata and original signed timestamps before
-          any AWS call.
-      check_device:
-        summary: Atomically register once or require an existing identical, unexpired
-          binding.
-  aws-infrastructure/document-api/tests/conftest.py:
-    purpose: Resolve the standalone runtime and optional native client for offline
-      tests.
-    functions: {}
-  aws-infrastructure/document-api/tests/device_fixtures.py:
-    purpose: Real synthetic P256 proofs and stateful DynamoDB doubles for offline
-      boundary tests.
-    functions:
-      sign_event:
-        summary: Sign actual body and token bytes independently of production canonicalization.
-      approval_for_event:
-        summary: Construct administrator state for one independently derived owner/key
-          identity.
-      fixture_database:
-        summary: Model atomic insert-if-absent and consistent reads using per-table
-          dictionaries.
-  aws-infrastructure/document-api/tests/test_auth_config.py:
-    purpose: Exercise deployment configuration discovery without credentials or AWS
-      mutations.
-    functions:
-      session:
-        summary: Provide a completed, tagged stack in the dedicated CI identity.
-      test_resolves_without_repository_variables:
-        summary: The activated stack alone provides the two deployment values.
-      test_bad_overrides_fail_closed:
-        summary: Partial or drifting explicit configuration cannot override the trusted
-          stack.
-      test_unready_or_wrong_stack_is_rejected:
-        summary: Incomplete, unowned or incorrectly identified stacks cannot authorize
-          deployment.
-      test_outputs_are_bound_to_family_pool_and_safe_environment_values:
-        summary: Wrong resources and environment-file injection fail before any export.
-      test_wrong_identity_stops_before_stack_read:
-        summary: Ambient administrator credentials cannot satisfy CI identity validation.
-      test_missing_stack_has_recovery_message_and_denials_propagate:
-        summary: Only actual missing-stack failures become activation guidance.
-      test_workflow_resolves_before_mutations_and_guards_diagnostics:
-        summary: Standalone validation cannot obtain AWS credentials or deploy infrastructure.
-      test_cli_exports_only_validated_identifiers:
-        summary: GitHub environment output is written only after successful configuration
-          validation.
-      test_browser_stack_must_be_completed_owned_and_exact:
-        summary: A second issuer cannot be added from an unready, unowned or drifting
-          stack.
-      test_browser_stack_cannot_supply_another_upload_client:
-        summary: The separate route accepts only the approved existing username upload
-          client.
-  aws-infrastructure/document-api/tests/test_boundaries.py:
-    purpose: Verify AWS SDK parameter contracts and Cognito bearer transport offline.
-    functions:
-      test_sdk_contracts:
-        summary: Use real boto3 serializers with stubbed AWS responses for a complete
-          upload.
-      test_client_sends_bearer_to_cloudfront:
-        summary: Verify real client/server canonical compatibility using a synthetic
-          signing boundary.
-      test_read_sdk_contracts:
-        summary: Exercise real SDK scan/query/get serializers with private streamed
-          content.
-  aws-infrastructure/document-api/tests/test_cognito.py:
-    purpose: Verify access-token ownership, private login and credential transport
-      boundaries offline.
-    functions:
-      test_denied_identity_never_writes:
-        summary: Absent, identity-token and mismatched principals cannot create storage
-          clients.
-      test_missing_authorizer_never_writes:
-        summary: A direct event with bearer text but no trusted authorizer context
-          is denied.
-      test_login_mfa_and_alias:
-        summary: Only Cognito receives password/MFA; the caller gets an access token
-          and canonical user.
-      test_noninteractive_login_never_prompts:
-        summary: Agent/non-terminal execution cannot collect a password from stdin.
-      test_password_echo_fallback_is_error:
-        summary: getpass warning becomes a hard failure before login can send a credential.
-      test_unsafe_transport_rejected:
-        summary: Reject non-HTTPS and ambiguous upload targets before transmission.
-      test_redirect_is_closed:
-        summary: A redirect cannot forward the password-independent bearer credential.
-      test_upload_route_requires_cognito:
-        summary: The deployable route never permits IAM or anonymous uploads and has
-          no default issuer.
-      test_browser_route_has_a_separate_exact_issuer_client_and_invoke_permission:
-        summary: Adding browser uploader trust leaves the existing route and issuer
-          isolated.
-      test_template_does_not_own_cloudfront_or_portal_ui:
-        summary: The extracted stack contains no portal distribution or UI resources.
-      test_resume_only_uploader_never_prompts_or_posts_when_login_is_missing:
-        summary: A missing OTP session stops one-file upload before credential prompts
-          or network writes.
-  aws-infrastructure/document-api/tests/test_deletions.py:
-    purpose: Deletion reports create owner-bound review rows and never touch S3 or
-      the file index.
-    functions:
-      deletion:
-        summary: Provide immutable metadata for one confirmed local Markdown deletion.
-      runtime:
-        summary: Use real signature validation and stateful conditional DynamoDB doubles.
-      test_record_retry_and_future_review_preserved:
-        summary: A lost response retry records once and never resets a later UI keep
-          decision.
-      test_conflicting_retry_never_overwrites_or_touches_s3:
-        summary: Conflicting event reuse is rejected without changing its original
-          immutable row.
-      test_invalid_observation_has_no_aws_calls:
-        summary: Reject hostile paths, mismatched IDs and client-supplied review state
-          before AWS access.
-      test_missing_or_revoked_authorization_cannot_record:
-        summary: Deletion reporting retains both user ownership and approved native
-          device gates.
-      test_database_failure_and_fresh_nonce_retry:
-        summary: A request nonce is single use while an event ID remains retryable
-          after DB failure.
-      test_table_and_iam_have_metadata_only_permissions:
-        summary: The retained review table is separate and the runtime explicitly
-          cannot remove S3 objects.
-      test_same_event_id_is_partitioned_by_verified_owner:
-        summary: An independently authorized account cannot overwrite the first owner's
-          observation.
-      test_deletion_dynamodb_sdk_contract:
-        summary: Serialize the conditional observation insert without credentials
-          or network access.
-  aws-infrastructure/document-api/tests/test_deployment.py:
-    purpose: Test deployment identity and artifact-bucket failure boundaries without
-      AWS writes.
-    functions:
-      session:
-        summary: Supply a simulated CI/CD identity and a correctly secured existing
-          bucket.
-      test_wrong_target_never_touches_s3:
-        summary: Reject unexpected identities and regions before creating an S3 client.
-      test_existing_bucket_is_verified_and_secured:
-        summary: Repeated preparation does not recreate the bucket and checks ownership
-          on reads/writes.
-      test_missing_bucket_is_created_then_verified:
-        summary: Only explicit NoSuchBucket triggers creation in the configured region.
-      test_lookup_failure_is_not_treated_as_missing:
-        summary: Fail closed on denied, redirected or otherwise unexpected bucket
-          access.
-      test_existing_bucket_wrong_region_is_untouched:
-        summary: Do not reconfigure a same-name bucket in a different region.
-      test_security_readback_must_match:
-        summary: Stop deployment if the required bucket protection is not confirmed.
-      test_workflow_aws_credentials_only_on_main:
-        summary: Standalone validation cannot obtain AWS credentials or deploy infrastructure.
-  aws-infrastructure/document-api/tests/test_device_approval.py:
-    purpose: Test explicit administrator decisions and fail-closed deployment IAM
-      prerequisites.
-    functions:
-      ci_session:
-        summary: Supply the exact dedicated CI identity without accessing AWS.
-      test_exact_pending_key_required_for_approval_and_revocation:
-        summary: An explicit matching confirmation and validated pending key are required
-          for changes.
-      test_corrupt_pending_never_approved:
-        summary: The pending table cannot substitute an unrelated key or owner under
-          a selected key.
-      test_admin_wrong_ci_context_rejected:
-        summary: Fork or non-main execution stops before credential use.
-      test_preflight_blocks_missing_or_excessive_grants:
-        summary: IAM simulation must explicitly allow required actions and deny forbidden
-          writes.
-      test_workflow_and_policy_boundaries:
-        summary: Deployment gates mutations; administrative approval remains explicit
-          and main-only.
-      test_registry_sdk_parameter_contracts:
-        summary: Serialize native enrollment, consistent approval reads and conditional
-          nonce writes.
-      test_install_permissions_creates_or_reuses_exact_policy:
-        summary: An existing matching managed policy is reusable; only the CI role
-          is attached.
-      test_install_permissions_rejects_existing_policy_drift:
-        summary: Never attach an unexpected policy or overwrite its contents during
-          bootstrap.
-  aws-infrastructure/document-api/tests/test_devices.py:
-    purpose: Verify proof, approval, replay and session association gates before document
-      writes.
-    functions:
-      runtime:
-        summary: Provide stateful AWS doubles without disabling a production authentication
-          check.
-      test_pending_approved_upload_replay_and_revocation:
-        summary: Only explicitly approved keys can bind sessions and write, and each
-          proof is single-use.
-      test_invalid_proof_before_any_aws:
-        summary: Tampered or malformed protocol inputs never create an AWS session.
-      test_owner_key_and_session_binding:
-        summary: Approval cannot cross principals or keys; signed metadata cannot
-          replace a family binding.
-      test_base64_body_and_nonce_retention:
-        summary: Gateway body encoding preserves signature bytes and nonce expiry
-          exceeds acceptance windows.
-      test_dependency_failure_never_reaches_document_storage:
-        summary: Unavailable approval or replay storage cannot degrade into an authorized
-          upload.
-      test_browser_route_binds_proof_path_and_requires_its_own_owner_approval:
-        summary: An old-route signature and family-pool approval cannot authorize
-          browser uploads.
-  aws-infrastructure/document-api/tests/test_path_documents.py:
-    purpose: Exercise latest-only uploads against emulated S3 and DynamoDB service
-      behavior.
-    functions:
-      payload:
-        summary: Create a path upload with source-project ownership metadata.
-      storage:
-        summary: Use unversioned S3 and real SDK expression serialization through
-          Moto.
-      test_same_path_reuses_document_and_task_and_updates_bytes:
-        summary: Unversioned repeated uploads retain one compact row and edited work
-          item.
-      test_bulk_paths_partial_failure_and_retry:
-        summary: Distinct folders remain distinct and one failed file does not stop
-          the batch.
-      test_source_alias_and_other_project_cannot_overwrite:
-        summary: The S3 source binding rejects aliases even without duplicate index
-          metadata.
-      test_index_failure_is_incomplete_and_explicit_retry_repairs:
-        summary: A failed index acknowledgement never returns READY; an explicit retry
-          is stable.
-      test_read_list_and_conditional_edit:
-        summary: Reads use latest bytes; stale browser edits cannot overwrite a newer
-          upload.
-      test_unsafe_paths_rejected_before_storage:
-        summary: Reject ambiguous, traversing and unbounded paths before persistence.
-      test_unicode_spaces_and_non_docs_roots_preserved:
-        summary: Strip only the agreed docs root while retaining valid Unicode paths.
-      test_compact_location_cannot_redirect_reads:
-        summary: Compact URI handling retains bucket, owner and traversal boundaries.
-      test_legacy_path_edit_compacts_and_keeps_source_binding:
-        summary: Editing a historical path row removes extras without losing its project
-          ownership.
-      test_legacy_raw_group_overwrite_still_works_without_versions:
-        summary: Owner/group uploads may replace old raw objects, but cannot adopt
-          native path intent.
-  aws-infrastructure/document-api/tests/test_portal_writes.py:
-    purpose: Cover browser writes, ETag conflicts and linked native plan tasks offline.
-    functions:
-      aws_storage:
-        summary: Exercise actual storage contracts using isolated offline AWS services.
-      upload:
-        summary: Supply a valid browser upload with plan metadata.
-      command:
-        summary: Build an owner-bound detail command.
-      ready_record:
-        summary: Provide a legacy READY plan to verify compact migration preserves
-          its task.
-      test_untrusted_or_cross_owner_upload_never_reaches_aws:
-        summary: The public gateway cannot invoke trusted operations or choose upload
-          identity.
-      test_upload_limits_and_partition_paths:
-        summary: All filename, UTF-8 size and partition validation precedes storage.
-      test_browser_and_native_storage_create_linked_plan_once:
-        summary: Stable uploads publish compact rows and preserve independently edited
-          tasks.
-      test_upload_without_index_preserves_existing_s3_object:
-        summary: An absent index row never authorizes overwriting token-bound native
-          upload intent.
-      test_incomplete_plan_never_returns_ready_task:
-        summary: Failed S3 writes publish no index row or success task receipt.
-      test_folder_browse_is_bounded_and_owner_partitioned:
-        summary: Folder listing queries only the verified partition and offers safe
-          group names.
-      test_replace_stale_etag_and_cross_owner_rejected:
-        summary: S3 rejects stale ETags atomically without publishing index metadata.
-      test_replace_uses_conditional_publish_and_preserves_task:
-        summary: A guarded replacement removes legacy fields without rewriting human
-          tasks.
-      test_task_detail_uses_markdown_and_update_keeps_source:
-        summary: Task detail reads current plan Markdown; independent edits use a
-          revision guard.
-      test_task_listing_excludes_incomplete_and_does_not_duplicate:
-        summary: Repeated reads project existing tasks without creating records or
-          reading S3.
-      test_successful_revision_returns_new_etag_and_exact_markdown:
-        summary: A save returns the current ETag and UTF-8 byte length read back from
-          S3.
-      test_private_upload_lambda_dispatch_creates_task_receipt:
-        summary: A trusted portal command reaches the same storage coordinator without
-          native claims.
-  aws-infrastructure/document-api/tests/test_projects.py:
-    purpose: Verify shared project catalog durability, duplicate guards and scoped
-      provisioning.
-    functions:
-      create_command:
-        summary: Build the trusted request produced by the authenticated portal bridge.
-      conditional_conflict:
-        summary: Model DynamoDB's real failed conditional write response.
-      test_atomic_create_and_same_owner_retry:
-        summary: Unique names use conditional writes; an identical owner retry returns
-          its original row.
-      test_unicode_normalization_and_casefold_share_project_id:
-        summary: Equivalent Unicode/case names cannot create visually duplicate catalog
-          entries.
-      test_invalid_commands_do_not_reach_aws:
-        summary: Reject public dispatch, ownership overrides and malformed data before
-          table access.
-      test_list_is_shared_bounded_and_cursor_identity_bound:
-        summary: All authorized members see catalog pages; a cursor only selects a
-          validated table key.
-      test_lambda_uses_dedicated_configured_table_only:
-        summary: Projects never depend on document/S3 storage and return the published
-          contract.
-      test_table_retention_encryption_billing_and_ci_bootstrap:
-        summary: The existing workflow applies table grants before deploying its retained
-          resource.
-  aws-infrastructure/document-api/tests/test_reads.py:
-    purpose: Exercise trusted read authorization, pagination and private content offline.
-    functions:
-      record:
-        summary: Provide a READY row including fields that must never reach read clients.
-      command:
-        summary: Create a trusted direct invocation command.
-      test_reject_invalid_read_before_aws:
-        summary: Reject HTTP operation dispatch and malformed direct requests before
-          AWS.
-      test_bounded_ready_list_and_cursor:
-        summary: Use one bounded page, omit private fields and bind continuation to
-          identity.
-      test_cursor_cannot_override_mine_owner:
-        summary: Reject forged mine continuation keys even with a matching cursor
-          envelope.
-      test_get_hidden_documents:
-        summary: Hide absent, incomplete and other-owner mine documents without S3
-          reads.
-      test_private_bounded_utf8_and_cleanup:
-        summary: Return raw text and close the S3 stream on success, size or UTF-8
-          failures.
-      test_read_handler_outcomes:
-        summary: Map valid reads, missing rows and dependency failures to safe proxy
-          responses.
-      test_get_command_validation:
-        summary: Reject unsafe identifiers and unexpected continuation fields on get.
-      test_stored_location_and_stream_failure:
-        summary: Block unexpected storage locations and close a stream whose read
-          fails.
-  aws-infrastructure/document-api/tests/test_storage_partitions.py:
-    purpose: Verify canonical partitions, legacy reads and invalid routing without
-      AWS access.
-    functions:
-      test_single_document_round_trip:
-        summary: Store exact bytes once, then read the recorded new-layout document.
-      test_unknown_categories_rejected_before_storage:
-        summary: A category cannot create an arbitrary partition or trigger any AWS
-          call.
-      test_new_record_cannot_redirect_read:
-        summary: Tampered row identity or category fails before S3 access.
-      test_policy_limits_new_writes_and_preserves_legacy_reads:
-        summary: Check source policy object grants without claiming live IAM simulation.
-      test_payload_file_group_and_per_file_override:
-        summary: Top-level group applies to all files unless a file explicitly overrides
-          it.
-      test_legacy_bucket_read_after_new_bucket_activation:
-        summary: Old READY records remain readable after the active write bucket changes.
-      test_same_filename_overwrites_one_stable_document:
-        summary: Repeated uploads retain one compact row and expose the latest unversioned
-          bytes.
-      test_unversioned_acknowledgement_marks_ready:
-        summary: An acknowledged latest-object write needs no S3 version in its compact
-          row or receipt.
-  aws-infrastructure/document-api/tests/test_storage_permissions.py:
-    purpose: Test the GitHub-only additive storage permission bootstrap without AWS
-      calls.
-    functions:
-      session:
-        summary: Provide the exact authorized CI context using fake AWS clients.
-      test_additive_scoped_policy_update:
-        summary: Only the two owned policies are written and read back; no trust changes
-          occur.
-      test_non_main_ci_context_rejected:
-        summary: A local or non-main run cannot mutate IAM.
-      test_readback_mismatch_stops:
-        summary: Do not claim success when the policy read-back differs.
-  aws-infrastructure/document-api/tests/test_upload.py:
-    purpose: Exercise validation, persistence ordering and failures without AWS access.
-    functions:
-      configure_storage:
-        summary: Model latest-only object lookup and compact metadata publication
-          for boundary tests.
-      payload:
-        summary: Supply a valid document with all supported metadata scalar types.
-      event_for:
-        summary: Create a realistic HTTP API proxy event.
-      test_valid_base64_and_utf8:
-        summary: Both API Gateway body encodings preserve document content.
-      test_invalid_file_rejected:
-        summary: Reject unsafe paths, invalid data and oversized content before persistence.
-      test_malformed_request:
-        summary: Non-object and malformed request bodies never pass validation.
-      test_batch_limits_and_username:
-        summary: Reject duplicate names, unbounded batches and path-like usernames.
-      test_batch_storage_and_order:
-        summary: Distinct files get stable identities and become READY only after
-          acknowledged writes.
-      test_failure_never_reports_ready:
-        summary: Every persistence boundary leaves an explicit incomplete result on
-          error.
-      test_handler_validates_entire_batch_before_aws:
-        summary: Invalid later files prevent earlier files from being written.
-      test_handler_partial_failure_and_success:
-        summary: The HTTP boundary distinguishes partial results and fully persisted
-          batches.
-      test_partial_batch_continues:
-        summary: A failed file does not hide the result of a later successful file.
-      test_utf16_body_rejected:
-        summary: Base64 encoding does not permit non-UTF-8 JSON bodies.
-  scripts/local_smoke.py:
-    purpose: Run the real Lambda handler against temporary Moto storage without AWS
-      access.
-    functions:
-      main:
-        summary: Upload through the trusted handler, read bytes back, and assert stable
-          file identity.
+      validate_document_request: Build an identity-bound document read command.
+      validate_document_response: Project safe document read fields.
+      portal_request: Build a verified browser document command.
+      safe_task: Project a bounded identity-owned task.
+      bounded_cursor: Project a bounded optional response cursor.
+      portal_response: Project safe portal operation responses.
+  telemetry-api/Dockerfile.lambda:
+    purpose: Build the one Lambda Web Adapter container image.
+infrastructure:
+  aws-infrastructure/cdk/app.py:
+    purpose: Compose prepare, cutover and retained-data retirement stacks.
+  aws-infrastructure/cdk/telemetry_stack.py:
+    purpose: Own the private UI bucket, telemetry-lambda, HTTP API, logs and IAM.
+  aws-infrastructure/cdk/edge_stack.py:
+    purpose: Adopt and update the existing CloudFront distribution in place.
+  aws-infrastructure/cdk/mcp_edge_stack.py:
+    purpose: Adopt the stable MCP distribution and migrate only its origin.
+  aws-infrastructure/cdk/data_stack.py:
+    purpose: Preserve document data while removing superseded compute.
+  aws-infrastructure/cdk/deploy.py:
+    purpose: Verify target, build, diff, deploy, publish and validate through local or OIDC credentials.
+  aws-infrastructure/cdk/configure_ci_policy.py:
+    purpose: Converge once to a bounded OIDC policy that denies direct legacy IAM mutation and retains policy inspection.
+  .github/workflows/validate.yml:
+    purpose: Validate the current application without AWS credentials or deployment.
+  aws-infrastructure/document-data.yaml:
+    purpose: Retain document storage resources independently of compute.
+  aws-infrastructure/auth.yaml:
+    purpose: Preserve family-pool clients, sessions and device records.
+  aws-infrastructure/username-auth.yaml:
+    purpose: Preserve the username pool and portal/native clients.
+tests:
+  telemetry-ui/src/app/app.routes.spec.ts:
+    purpose: Verify integrated route and authentication boundaries.
+  tests:
+    purpose: Focused API, document lifecycle, MCP, adapter and browser journeys.
+  aws-infrastructure/cdk/tests/test_stacks.py:
+    purpose: Verify CDK resources, concurrency and routes.

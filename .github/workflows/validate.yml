@@ -1,22 +1,57 @@
-name: Validate
+name: Validate current application
+
 on: [push, pull_request, workflow_dispatch]
+
 permissions:
   contents: read
+
 jobs:
   validate:
+    name: Application checks
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13'
           cache: pip
-      - run: python -m pip install -r requirements-dev.txt
-      - run: python -m pytest -q
-        env:
-          AWS_EC2_METADATA_DISABLED: 'true'
-          AWS_DEFAULT_REGION: ca-central-1
-          AWS_ACCESS_KEY_ID: testing
-          AWS_SECRET_ACCESS_KEY: testing
-      - run: cfn-lint aws-infrastructure/*.yaml aws-infrastructure/document-api/template.yaml
-      - run: python scripts/local_smoke.py
+          cache-dependency-path: requirements-dev.txt
+      - name: Install exact dependencies
+        run: |
+          npm ci
+          python -m pip install -r requirements-dev.txt -r aws-infrastructure/cdk/requirements.txt cfn-lint==1.58.0
+      - name: Build and test Angular
+        run: |
+          npm run build
+          npm test
+          npm run check:format:web
+      - name: Test and format Python
+        run: |
+          python scripts/format_python.py --check
+          PYTHONPATH=telemetry-api python -m pytest tests aws-infrastructure/cdk/tests -q
+      - name: Validate retained templates and policy source
+        run: |
+          cfn-lint aws-infrastructure/*.yaml
+          python aws-infrastructure/cdk/configure_ci_policy.py check
+      - name: Synthesize every topology without deployment
+        working-directory: aws-infrastructure/cdk
+        run: |
+          npx --yes aws-cdk@2.1147.0 --app "python app.py" synth SoftrobotsTelemetry --quiet --context phase=prepare
+          npx --yes aws-cdk@2.1147.0 --app "python app.py" synth SoftrobotsPortalEdge --quiet --context phase=cutover
+          npx --yes aws-cdk@2.1147.0 --app "python app.py" synth MarkdownMcpEdge --quiet --context phase=mcp-cutover
+          npx --yes aws-cdk@2.1147.0 --app "python app.py" synth SoftrobotsDocumentData --quiet --context phase=retire
+      - name: Build the production Lambda image
+        run: docker build --platform linux/amd64 --provenance=false -f telemetry-api/Dockerfile.lambda -t telemetry-lambda:test telemetry-api
+      - name: Exercise the packaged Lambda web adapter
+        run: TELEMETRY_LAMBDA_ADAPTER_TESTS=1 PYTHONPATH=telemetry-api python -m pytest tests/test_system.py -q -k real_lambda_adapter
+      - name: Run the two-viewport browser journey
+        run: |
+          npx playwright install --with-deps chromium
+          WO_BROWSER_EVIDENCE=/tmp/telemetry-browser node tests/workspace-browser.mjs

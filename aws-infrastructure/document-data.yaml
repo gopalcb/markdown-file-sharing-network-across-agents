@@ -1,0 +1,141 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Retained Work Organizer document buckets and DynamoDB data.
+Resources:
+  Documents:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'softrobots-document-api-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ObjectOwnership: BucketOwnerEnforced}]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      VersioningConfiguration: {Status: Suspended}
+  DocumentsPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Documents
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource: [!GetAtt Documents.Arn, !Sub '${Documents.Arn}/*']
+            Condition: {Bool: {'aws:SecureTransport': 'false'}}
+  AgentWorkHistory:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'agent-work-history--${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ObjectOwnership: BucketOwnerEnforced}]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+  AgentWorkHistoryPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AgentWorkHistory
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource: [!GetAtt AgentWorkHistory.Arn, !Sub '${AgentWorkHistory.Arn}/*']
+            Condition: {Bool: {'aws:SecureTransport': 'false'}}
+  UserFiles:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: softrobots-document-api-user-files
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - {AttributeName: username, AttributeType: S}
+        - {AttributeName: file_id, AttributeType: S}
+      KeySchema:
+        - {AttributeName: username, KeyType: HASH}
+        - {AttributeName: file_id, KeyType: RANGE}
+      SSESpecification: {SSEEnabled: true}
+      PointInTimeRecoverySpecification: {PointInTimeRecoveryEnabled: true}
+  Projects:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: softrobots-projects
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions: [{AttributeName: project_id, AttributeType: S}]
+      KeySchema: [{AttributeName: project_id, KeyType: HASH}]
+      SSESpecification: {SSEEnabled: true}
+      PointInTimeRecoverySpecification: {PointInTimeRecoveryEnabled: true}
+  LocalDeletions:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: softrobots-document-api-local-deletions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - {AttributeName: owner_id, AttributeType: S}
+        - {AttributeName: event_id, AttributeType: S}
+      KeySchema:
+        - {AttributeName: owner_id, KeyType: HASH}
+        - {AttributeName: event_id, KeyType: RANGE}
+      SSESpecification: {SSEEnabled: true}
+      PointInTimeRecoverySpecification: {PointInTimeRecoveryEnabled: true}
+  NativeDevicePending:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: softrobots-native-device-pending
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions: [{AttributeName: pending_id, AttributeType: S}]
+      KeySchema: [{AttributeName: pending_id, KeyType: HASH}]
+      SSESpecification: {SSEEnabled: true}
+      PointInTimeRecoverySpecification: {PointInTimeRecoveryEnabled: true}
+  NativeDeviceApprovals:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: softrobots-native-device-approvals
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions: [{AttributeName: approval_id, AttributeType: S}]
+      KeySchema: [{AttributeName: approval_id, KeyType: HASH}]
+      SSESpecification: {SSEEnabled: true}
+      PointInTimeRecoverySpecification: {PointInTimeRecoveryEnabled: true}
+  NativeDeviceNonces:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: softrobots-native-device-nonces
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions: [{AttributeName: nonce_id, AttributeType: S}]
+      KeySchema: [{AttributeName: nonce_id, KeyType: HASH}]
+      SSESpecification: {SSEEnabled: true}
+      PointInTimeRecoverySpecification: {PointInTimeRecoveryEnabled: true}
+      TimeToLiveSpecification: {AttributeName: expires_at, Enabled: true}
+Outputs:
+  DocumentsBucket: {Value: !Ref AgentWorkHistory}
+  LegacyDocumentsBucket: {Value: !Ref Documents}
+  UserFilesTable: {Value: !Ref UserFiles}
+  ProjectsTable: {Value: !Ref Projects}
+  LocalDeletionsTable: {Value: !Ref LocalDeletions}

@@ -1,0 +1,35 @@
+<div class="wo-stack wo-enter">
+  <wo-card
+    heading="Start with one clear next step"
+    description="Add an item and keep its owner close. This preview keeps changes in your current tab; reloading clears them."
+    ><wo-work-item-form
+  /></wo-card>
+  <wo-card heading="Your work" [description]="store.items().length + ' items in this tab'">
+    <div class="wo-stack">
+      @for (item of store.items(); track item.id) {
+        <wo-card
+          ><div class="task-line">
+            <div>
+              <h3>{{ item.name }}</h3>
+              <p class="wo-muted">{{ item.email }}</p>
+              <p>{{ item.done ? 'Completed' : 'Open' }}</p>
+            </div>
+            <button
+              type="button"
+              class="wo-button--secondary"
+              (click)="store.toggle(item.id)"
+              [attr.aria-label]="(item.done ? 'Reopen ' : 'Complete ') + item.name"
+            >
+              {{ item.done ? 'Reopen' : 'Mark complete' }}
+            </button>
+          </div></wo-card
+        >
+      } @empty {
+        <wo-card
+          heading="A little space to begin"
+          description="Your first work item will appear here."
+        />
+      }
+    </div>
+  </wo-card>
+</div>
