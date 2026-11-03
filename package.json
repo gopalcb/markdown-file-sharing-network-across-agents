@@ -1,0 +1,12 @@
+{
+  "name": "markdown-file-sharing-network-across-agents",
+  "private": true,
+  "workspaces": ["telemetry-ui"],
+  "scripts": {
+    "build": "npm run build --workspace telemetry-ui",
+    "test": "npm test --workspace telemetry-ui",
+    "test:browser": "node tests/workspace-browser.mjs"
+  },
+  "devDependencies": {"@playwright/test": "1.56.1"},
+  "engines": {"node": ">=22.13"}
+}

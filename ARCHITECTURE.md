@@ -1,23 +1,46 @@
 # Architecture
 
-The document Lambda owns the authenticated Markdown boundary and the S3/DynamoDB publication protocol. API Gateway validates JWT signatures, issuer, audience, and scope. `app.lambda_handler` validates identity and routes public ingestion versus trusted IAM direct invocations. Public HTTP events cannot select trusted operations.
+## Runtime and ownership
 
-## Structure and execution
+`telemetry-api/server.py` dispatches Flask portal routes and authenticated FastMCP
+routes in one Lambda image. Browser sessions, native signed uploads and MCP OAuth
+retain separate authentication boundaries. Entry points delegate document work to
+`document_api/handler.py`.
 
-`aws-infrastructure/document-api/src/app.py` configures bounded AWS clients, dispatches requests, and sanitizes outcomes. `src/session_device_service.py` binds verified Cognito refresh families to reported devices and enforces a fixed original-session deadline. It is bundled locally rather than imported from a portal backend.
+Document storage has two owners: `dynamodb_document_service.py` manages index,
+task, project, device and deletion records; `s3_document_service.py` owns Markdown
+objects, paths, reads, edits and storage dispatch. Validation and public response
+projection remain separate from persistence. Do not reintroduce the superseded
+standalone document Lambda/services tree.
 
-`src/services/validation_service.py`, `portal_validation_service.py`, and `project_validation_service.py` own request validation. `native_device_service.py` checks administrator-approved public keys and consumes one-use nonces. Enrollment does not approve a key.
+`telemetry-ui/` is the Angular application. Browser verification uses local
+synthetic authentication/API fixtures, not live identity or data resources.
 
-`document_service.py` routes batches. `path_document_service.py` uses conditional S3 writes, stable path identity, and explicit incomplete outcomes. `document_storage_service.py` publishes compact owner-index rows. `document_read_service.py` provides bounded latest-byte reads. `portal_document_service.py` supplies trusted adapter operations and conditional ETag edits; its name is historical, and no portal web backend is packaged. `task_service.py` links plans to independently editable tasks, while `project_service.py` owns a shared catalog. `deletion_service.py` records immutable local deletion observations without deleting storage. `logging_service.py` records identifiers without document bodies or credentials.
+## Infrastructure and validation
 
-## Data and configuration
+`aws-infrastructure/cdk/` synthesizes the one telemetry Lambda and edge/data/
+identity examples from the top-level templates. Lambda reserved concurrency is 10.
+The examples use fictitious account 123456789012 and example identities. The app
+rejects real-account synthesis. No deploy, IAM apply, migration or retirement
+entry point is retained.
 
-The API template supplies `DOCUMENTS_BUCKET`, `LEGACY_DOCUMENTS_BUCKET`, `USER_FILES_TABLE`, `PROJECTS_TABLE`, and `DELETIONS_TABLE`. Native registry/session table names are source-compatible constants; templates and example policies must agree. S3 keys bind owner, classification, and canonical relative path. Source-binding metadata prevents unrelated source aliases from taking over an occupied path. Stable UUID5 IDs preserve linked tasks across explicit updates.
+The root Python environment validates the runtime and CDK. The UI has one root npm
+workspace and lockfile. GitHub CI has runtime, collector and UI jobs only; no OIDC
+or AWS mutation steps.
 
-S3 acknowledgement precedes DynamoDB READY publication. The services are not transactional: report incomplete or uncertain writes without blind retries. Rows retain path/status/identity/task metadata, not immutable S3 version pins. Reads return latest UTF-8 bytes with an ETag. Successful acknowledgement does not promise those bytes remain current after a competing writer.
+## Local strategic memory
 
-## Local verification and extension
+The independent `strategic-memory-collector-agent/` package validates a completion
+manifest, durably admits it to SQLite, and starts a detached serial LangGraph
+worker. Qwen extraction is followed by deterministic evidence-reference checks
+and candidate persistence. Human review remains necessary before trusted-memory
+promotion. Its root CLI, services folder and dedicated tests are documented in its own
+architecture/code map.
 
-`scripts/local_smoke.py` invokes the real handler under Moto. It uses the trusted invocation boundary so it can verify storage without forging a production JWT or bypassing native approval. Tests additionally exercise public ingestion/authentication with controlled fixtures. No live AWS or real private login is used.
+## State boundaries
 
-`aws-infrastructure/document-api/scripts/client/` is a minimal optional macOS native login/signing client, including its Swift Keychain helper. Deployment/reference helpers remain separate from runtime and are not included in CI execution. CI has no AWS credential or deployment step. To add an agent interface, implement a separately authenticated adapter with narrowly scoped invoke permission, or use the independently maintained companion MCP service according to its own contract.
+The collector queue lives in ignored `.runtime/` state. Copied watcher owner, session,
+receipt, deletion and device runtime files remain excluded from Git. None is
+required for ordinary validation or automatically uploaded. Task records are local
+and ignored. The Softrobots checkout retains deployment history; application
+changes should not be copied into both repositories without explicit scope.

@@ -1,0 +1,17 @@
+<dialog #dialog class="tm-dialog tm-upload-dialog" aria-labelledby="upload-title" (cancel)="(busy() || reading()) && $event.preventDefault()">
+<form (ngSubmit)="upload()"><h2 id="upload-title">Upload Markdown</h2>
+<fieldset [disabled]="busy() || submitted() || reading()">
+<label for="upload-files">Markdown files</label><input id="upload-files" type="file" accept=".md,text/markdown" multiple (change)="choose($event)" /><p>Up to 10 UTF-8 .md files, 256 KiB each, 1 MiB per batch.</p>
+<label>S3 folder</label><wo-select label="S3 folder" [options]="options" [value]="group" (valueChange)="group=$event" [disabled]="folderLoading()" />
+<p class="tm-folder-path">{{prefix || 'Loading permitted folders…'}}</p>
+@if(cursor()){<button type="button" (click)="loadFolders(cursor())" [disabled]="folderLoading()">Browse more folders</button>}
+@if(!folders().length && !folderLoading()){<button type="button" (click)="loadFolders()">Retry folders</button>}
+<div class="tm-form-row"><div><label>Document type</label><wo-select label="Document type" [options]="kinds" [value]="kind" (valueChange)="kind=$event" /></div><div><label for="upload-category">Category</label><input id="upload-category" name="category" [(ngModel)]="category" maxlength="120" placeholder="e.g. Engineering" /></div></div>
+<label for="upload-title-field">Title (optional for a batch)</label><input id="upload-title-field" name="title" [(ngModel)]="title" maxlength="120" placeholder="Defaults to each filename" />
+<div class="tm-form-row"><div><label for="upload-project">Project</label><input id="upload-project" name="project" [(ngModel)]="project" maxlength="80" [required]="kind==='plan'" /></div><div><label for="upload-assignee">Assigned to</label><input id="upload-assignee" name="assignee" [(ngModel)]="assignee" maxlength="120" [required]="kind==='plan'" placeholder="Agent or human name" /></div></div>
+</fieldset>
+<ul class="tm-upload-files">@for(file of files();track file.name){<li>{{file.name}}</li>}</ul>
+@if(error()){<p class="tm-error" role="alert">{{error()}}</p>}
+@for(receipt of receipts();track receipt.file_id){<p role="status">{{receipt.name}} — {{receipt.status==='READY'?'Uploaded':'Not confirmed'}}<br/><small>{{receipt.file_id}}</small>@if(receipt.task){<br/>Linked task created.}</p>}
+<div class="tm-dialog-actions"><button type="button" (click)="close()" [disabled]="busy() || reading()">Close</button><button class="tm-primary" type="submit" [disabled]="busy() || reading() || submitted() || !files().length || !prefix">{{busy()?'Uploading…':'Upload to S3'}}</button></div>
+</form></dialog>

@@ -1,5 +1,7 @@
--r aws-infrastructure/document-api/src/requirements.txt
-pytest==8.4.2
-moto[s3,dynamodb]==5.1.16
+-r telemetry-api/requirements.txt
+-r aws-infrastructure/cdk/requirements.txt
+pytest==9.1.1
+moto[s3,dynamodb]==5.2.5
 PyYAML==6.0.3
+ruff==0.14.3
 cfn-lint==1.59.0

@@ -1,0 +1,5 @@
+<section class="tm-markdown-editor tm-document-reader wo-document-reader">
+ <div class="tm-reader-header"><span>{{ label }}</span><div class="tm-editor-actions"><button type="button" [disabled]="disabled" [attr.aria-pressed]="editing" (click)="edit()">Edit</button><button type="button" [attr.aria-pressed]="!editing" (click)="editing=false">Preview</button></div></div>
+ <div class="tm-editor-host" [hidden]="!editing"><div #editor></div></div>
+ <div class="tm-editor-preview tm-document-body" [hidden]="editing"><wo-markdown [content]="value" /></div>
+</section>

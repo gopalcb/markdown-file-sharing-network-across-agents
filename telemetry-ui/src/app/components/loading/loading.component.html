@@ -1,0 +1,45 @@
+<div class="wo-stack wo-enter">
+  <wo-card
+    heading="Feedback at the right scale"
+    description="Preview a short loading state. Real screens use these indicators only while work is pending."
+  >
+    <div class="wo-grid">
+      <wo-card class="wo-col-lg-4" heading="Inside a button"
+        ><button (click)="preview('button')" [disabled]="buttonBusy()">
+          @if (buttonBusy()) {
+            <wo-spinner [announce]="false" /> Working…
+          } @else {
+            Preview button loader
+          }
+        </button>
+        <p role="status" class="form-message">
+          {{ buttonMessage() }}
+        </p></wo-card
+      >
+      <wo-card class="wo-col-lg-4" heading="Within a card"
+        ><div class="demo-stage" [attr.aria-busy]="cardBusy()">
+          @if (cardBusy()) {
+            <wo-spinner size="card" label="Loading card preview" />
+          } @else {
+            <p role="status">{{ cardMessage() }}</p>
+          }
+          <button (click)="preview('card')" [disabled]="cardBusy()" class="wo-button--secondary">
+            Preview card loader
+          </button>
+        </div></wo-card
+      >
+      <wo-card class="wo-col-lg-4" heading="In the content panel"
+        ><div class="demo-stage" [attr.aria-busy]="pageBusy()">
+          @if (pageBusy()) {
+            <wo-spinner size="page" label="Loading section preview" />
+          } @else {
+            <p role="status">{{ pageMessage() }}</p>
+          }
+          <button (click)="preview('page')" [disabled]="pageBusy()" class="wo-button--secondary">
+            Preview section loader
+          </button>
+        </div></wo-card
+      >
+    </div>
+  </wo-card>
+</div>

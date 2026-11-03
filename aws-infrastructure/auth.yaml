@@ -1,23 +1,30 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Upload client and device/session binding table for an existing Cognito
-  pool.
+Description: Work Organizer clients and retained session tables for the existing family pool.
 Parameters:
-  EnableEmailOtp:
-    Type: String
-    Default: 'false'
-    AllowedValues:
-    - 'false'
-    - 'true'
-    Description: Enable choice-based authentication on this client; configure the existing pool separately.
   ExistingUserPoolId:
     Type: String
-    Description: Existing pool to which the public upload client is attached.
-Conditions:
-  EmailOtpEnabled:
-    Fn::Equals:
-    - Ref: EnableEmailOtp
-    - 'true'
+    Default: ca-central-1_Fixture123
+    AllowedValues: [ca-central-1_Fixture123]
+  ExistingDomainPrefix:
+    Type: String
+    Default: ca-central-1yxctjkchu
+    AllowedValues: [ca-central-1yxctjkchu]
+  PortalOrigin:
+    Type: String
+    Default: https://portal.example.com
+    AllowedValues: [https://portal.example.com]
 Resources:
+  BrowserSessions:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: softrobots-browser-sessions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions: [{AttributeName: session_id, AttributeType: S}]
+      KeySchema: [{AttributeName: session_id, KeyType: HASH}]
+      SSESpecification: {SSEEnabled: true}
+      TimeToLiveSpecification: {AttributeName: expires_at, Enabled: true}
   SessionDevices:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Retain
@@ -25,48 +32,58 @@ Resources:
     Properties:
       TableName: softrobots-auth-sessions
       BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-      - AttributeName: session_id
-        AttributeType: S
-      KeySchema:
-      - AttributeName: session_id
-        KeyType: HASH
-      SSESpecification:
-        SSEEnabled: true
-      TimeToLiveSpecification:
-        AttributeName: expires_at
-        Enabled: true
-  UploadClient:
+      AttributeDefinitions: [{AttributeName: session_id, AttributeType: S}]
+      KeySchema: [{AttributeName: session_id, KeyType: HASH}]
+      SSESpecification: {SSEEnabled: true}
+      TimeToLiveSpecification: {AttributeName: expires_at, Enabled: true}
+  PortalUsers:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      UserPoolId: !Ref ExistingUserPoolId
+      GroupName: portal-users
+      Description: Explicit portal access; no AWS role or automatic membership.
+  Client:
     Type: AWS::Cognito::UserPoolClient
     Properties:
-      UserPoolId:
-        Ref: ExistingUserPoolId
-      ClientName: work-organizer-document-upload
+      UserPoolId: !Ref ExistingUserPoolId
+      ClientName: work-organizer-portal
       GenerateSecret: false
-      ExplicitAuthFlows:
-        Fn::If:
-        - EmailOtpEnabled
-        - - ALLOW_USER_AUTH
-          - ALLOW_USER_PASSWORD_AUTH
-          - ALLOW_REFRESH_TOKEN_AUTH
-        - - ALLOW_USER_PASSWORD_AUTH
-          - ALLOW_REFRESH_TOKEN_AUTH
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email]
+      SupportedIdentityProviders: [COGNITO]
+      CallbackURLs: [!Sub '${PortalOrigin}/work-organizer/auth/callback']
+      LogoutURLs: [!Sub '${PortalOrigin}/work-organizer/signed-out']
+      ExplicitAuthFlows: [ALLOW_USER_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
       PreventUserExistenceErrors: ENABLED
       EnableTokenRevocation: true
       AccessTokenValidity: 5
       IdTokenValidity: 5
       RefreshTokenValidity: 90
-      TokenValidityUnits:
-        AccessToken: minutes
-        IdToken: minutes
-        RefreshToken: days
+      TokenValidityUnits: {AccessToken: minutes, IdToken: minutes, RefreshToken: days}
+  UploadClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref ExistingUserPoolId
+      ClientName: work-organizer-document-upload
+      GenerateSecret: false
+      ExplicitAuthFlows: [ALLOW_USER_AUTH, ALLOW_USER_PASSWORD_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      AccessTokenValidity: 5
+      IdTokenValidity: 5
+      RefreshTokenValidity: 90
+      TokenValidityUnits: {AccessToken: minutes, IdToken: minutes, RefreshToken: days}
 Outputs:
-  SessionDevicesTableName:
-    Value:
-      Ref: SessionDevices
-  UserPoolId:
-    Value:
-      Ref: ExistingUserPoolId
-  UploadClientId:
-    Value:
-      Ref: UploadClient
+  BrowserSessionsTableName: {Value: !Ref BrowserSessions}
+  SessionDevicesTableName: {Value: !Ref SessionDevices}
+  UserPoolId: {Value: !Ref ExistingUserPoolId}
+  Issuer:
+    Value: !Sub 'https://cognito-idp.${AWS::Region}.${AWS::URLSuffix}/${ExistingUserPoolId}'
+  ClientId: {Value: !Ref Client}
+  UploadClientId: {Value: !Ref UploadClient}
+  Domain:
+    Value: !Sub 'https://${ExistingDomainPrefix}.auth.${AWS::Region}.amazoncognito.com'
+  RedirectUri: {Value: !Sub '${PortalOrigin}/work-organizer/auth/callback'}
+  LogoutUri: {Value: !Sub '${PortalOrigin}/work-organizer/signed-out'}
+  Group: {Value: !Ref PortalUsers}

@@ -1,0 +1,129 @@
+<wo-card
+  heading="Portfolio activity"
+  description="Visits and interactions from the GitHub portfolio."
+>
+  <section class="wo-stack" aria-label="GH Portfolio analytics" [attr.aria-busy]="loading()">
+    <div class="wo-actions portfolio-report-toolbar">
+      <label class="wo-field portfolio-report-search">
+        <span class="wo-field-label">Search activities</span>
+        <input
+          type="search"
+          placeholder="Visitor, page, location or activity"
+          [value]="query()"
+          (input)="search($any($event.target).value)"
+        />
+      </label>
+      <button type="button" class="wo-button--secondary" [disabled]="loading()" (click)="refresh()">
+        Refresh
+      </button>
+    </div>
+    <p class="wo-muted" aria-live="polite">
+      {{ activities().length }} activities · {{ visitorCount() }} visitor sessions ·
+      {{ events().length }} recorded events
+    </p>
+    <p class="wo-muted">
+      Times use {{ timezone }}. Location is approximate. Each visitor label represents an anonymous
+      session, with a shared row colour. Matching menu clicks and page loads within 10 seconds are
+      combined; other actions remain separate.
+    </p>
+    @if (asOf()) {
+      <p class="wo-muted">
+        Report snapshot: {{ asOf() | date: 'medium' : undefined }}. Data is retained for up to 90
+        days.
+      </p>
+    }
+    @if (loading()) {
+      <div role="status">
+        <wo-spinner label="Loading analytics" /> <span>{{ receivedCount() }} events received</span>
+      </div>
+    }
+    @if (error()) {
+      <div role="alert">
+        <p class="error-text">{{ error() }}</p>
+        <button type="button" (click)="retry()">Retry</button>
+      </div>
+    }
+    @if (!loading()) {
+      @if (nextCursor() && !error()) {
+        <div class="wo-actions">
+          <p class="wo-muted">
+            More retained data is available. Current totals cover loaded events.
+          </p>
+          <button type="button" class="wo-button--secondary" (click)="continueLoading()">
+            Continue loading
+          </button>
+        </div>
+      }
+      @if (filtered().length) {
+        <div
+          class="portfolio-report-table"
+          tabindex="0"
+          role="region"
+          aria-label="Portfolio activity table"
+        >
+          <table>
+            <caption class="wo-visually-hidden">
+              GH Portfolio visitor activity, newest first
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Visitor</th>
+                <th scope="col">Date and time visited</th>
+                <th scope="col">Approximate location</th>
+                <th scope="col">Visit type</th>
+                <th scope="col">Page / control</th>
+                <th scope="col">Remark</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of displayed(); track row.id) {
+                <tr [style.background-color]="row.colour">
+                  <th scope="row">{{ row.visitor }}</th>
+                  <td>
+                    <time [attr.datetime]="row.visitedAt">{{
+                      row.visitedAt | date: 'medium'
+                    }}</time>
+                  </td>
+                  <td>{{ row.location }}</td>
+                  <td>{{ row.activity }}</td>
+                  <td>{{ row.page }}</td>
+                  <td>{{ row.remark }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="wo-actions" aria-label="Activity pagination">
+          <button
+            type="button"
+            class="wo-button--secondary"
+            [disabled]="pageIndex() === 0"
+            (click)="movePage(-1)"
+          >
+            Previous
+          </button>
+          <span aria-live="polite"
+            >Page {{ pageIndex() + 1 }} of {{ pageCount() }} · {{ filtered().length }} matching
+            activities</span
+          >
+          <button
+            type="button"
+            class="wo-button--secondary"
+            [disabled]="pageIndex() + 1 >= pageCount()"
+            (click)="movePage(1)"
+          >
+            Next
+          </button>
+        </div>
+      } @else if (!error()) {
+        <p class="wo-muted">
+          {{
+            query()
+              ? 'No activities match this search.'
+              : 'No portfolio activity has been recorded yet.'
+          }}
+        </p>
+      }
+    }
+  </section>
+</wo-card>

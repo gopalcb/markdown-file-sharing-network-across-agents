@@ -1,0 +1,111 @@
+<div class="wo-shell wo-telemetry">
+  @if (showShell()) {
+    <a class="skip-link" href="#page-content" (click)="skipToContent($event)">Skip to content</a>
+    <header class="wo-header">
+      <a class="wo-brand" routerLink="/work-organizer/workspace/project-tracker"
+        ><svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          aria-hidden="true"
+        >
+          <path
+            d="M12 3v3M9 3h6M5 9a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3zM2 11v5m20-5v5M9 16h6"
+          />
+          <circle cx="9" cy="11" r="1" />
+          <circle cx="15" cy="11" r="1" /></svg
+        >TELEMETRY</a
+      >
+      <nav class="wo-header-nav" aria-label="Main navigation">
+        @for (item of headerNavigation; track item.path) {
+          <a [routerLink]="item.path" routerLinkActive="active" ariaCurrentWhenActive="page">{{
+            item.label
+          }}</a>
+        }
+      </nav>
+      <div #accountRegion class="wo-account">
+        <button
+          #accountButton
+          class="wo-account-button"
+          type="button"
+          aria-controls="account-settings"
+          [attr.aria-expanded]="accountOpen()"
+          (click)="accountOpen.set(!accountOpen())"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            aria-hidden="true"
+          >
+            <path d="M7 10V7a5 5 0 0 1 10 0v3" />
+            <rect x="4" y="10" width="16" height="12" rx="1" />
+            <path d="M12 14v4" />
+          </svg>
+          <span class="wo-visually-hidden">{{ auth.displayName() }}</span>
+          <span class="wo-visually-hidden">Account settings</span>
+        </button>
+        @if (accountOpen()) {
+          <section
+            id="account-settings"
+            class="wo-account-popup wo-stack"
+            aria-label="Account settings"
+          >
+            <h2 class="wo-card-title">Account settings</h2>
+            <p class="wo-muted">{{ auth.displayName() }}</p>
+            <a routerLink="/work-organizer/settings/preferences">Preferences</a>
+            <button class="wo-button--secondary" type="button" (click)="logout()">Log out</button>
+          </section>
+        }
+      </div>
+    </header>
+    <div class="wo-body">
+      <main class="wo-main" id="page-content" [attr.aria-busy]="busy()">
+        <h1
+          #pageTitle
+          class="wo-section-title"
+          [class.wo-visually-hidden]="
+            heading() === 'Project Tracker' ||
+            heading() === 'Documents' ||
+            heading() === 'Merger agent'
+          "
+          tabindex="-1"
+        >
+          {{ heading() }}
+        </h1>
+        @if (busy()) {
+          <div class="route-progress"><wo-spinner label="Loading page" /></div>
+        }
+        <router-outlet />
+      </main>
+    </div>
+    <footer
+      class="wo-footer"
+      [hidden]="
+        heading() === 'Project Tracker' ||
+        heading() === 'Documents' ||
+        heading() === 'Merger agent'
+      "
+    >
+      <p>Softrobots Systems <span aria-hidden="true">·</span> Built to grow together.</p>
+      <nav class="wo-footer-links" aria-label="Resources">
+        <h2 class="wo-eyebrow">Resources</h2>
+        <a routerLink="/work-organizer/design-system/components">Design system</a>
+      </nav>
+    </footer>
+  } @else {
+    <main class="wo-auth-page" id="page-content" [attr.aria-busy]="busy()">
+      @if (authPage()) {
+        <router-outlet />
+      } @else {
+        <wo-spinner label="Opening sign-in" />
+      }
+    </main>
+  }
+</div>

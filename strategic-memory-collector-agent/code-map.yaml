@@ -1,0 +1,53 @@
+project: strategic-memory-collector-agent
+files:
+  services/contracts_service.py:
+    purpose: Validate completed-task evidence and review-only candidate contracts.
+    functions:
+      contains_sensitive_text: Detect high-confidence secrets and private identities.
+      validate_relative_path: Bound repository-relative evidence paths.
+      CheckEvidence.reject_sensitive_evidence: Reject sensitive verification metadata.
+      CompletionManifest.validate_changed_paths: Normalize safe changed paths.
+      CompletionManifest.reject_sensitive_summary: Reject sensitive summary content.
+      CompletionManifest.require_verified_completion: Require completed verified work.
+      CompletionManifest.allowed_evidence_sources: Enumerate exact candidate citations.
+      MemoryCandidate.reject_sensitive_candidate_text: Reject sensitive or transient output.
+      MemoryCandidate.normalize_evidence_sources: Deduplicate bounded citations.
+      bedrock_candidate_schema: Build the supported Bedrock JSON Schema subset.
+  services/model_service.py:
+    purpose: Invoke Bedrock Qwen with structured output.
+    functions:
+      BedrockQwenModel.from_environment: Load public model configuration.
+      BedrockQwenModel.identity: Project non-sensitive provider identity.
+      BedrockQwenModel.extract: Extract strict candidates from verified evidence.
+  services/storage_service.py:
+    purpose: Persist idempotent jobs, leases, receipts, and candidates.
+    functions:
+      canonical: Encode deterministic records.
+      CollectorStore.connect: Own one SQLite transaction.
+      CollectorStore.enqueue: Admit completion evidence once.
+      CollectorStore.claim_next: Lease one pending or interrupted job.
+      CollectorStore.complete_job: Atomically store candidates and receipt.
+      CollectorStore.fail_job: Record a safe provider error type.
+      CollectorStore.retry: Requeue one bounded failed job.
+      CollectorStore.status: Project safe operational counts.
+      CollectorStore.list_candidates: Return project-scoped review candidates.
+      CollectorStore.public_job: Remove evidence from job projections.
+      CollectorStore.drainer_lock: Enforce one local queue drainer.
+  services/workflow_service.py:
+    purpose: Coordinate extraction, deterministic gates, and persistence with LangGraph.
+    functions:
+      StrategicMemoryWorkflow.extract_candidates: Invoke the configured model once.
+      StrategicMemoryWorkflow.gate_candidates: Enforce exact evidence and deduplication.
+      StrategicMemoryWorkflow.persist_candidates: Persist review-only candidates.
+      StrategicMemoryWorkflow.run: Execute one job with a stable graph thread.
+      StrategicMemoryWorkflow.close: Close checkpoint storage.
+      validate_model_batch: Validate injected model output.
+  cli.py:
+    purpose: Expose queue admission, detached draining, status, retry, and review.
+    functions:
+      load_manifest: Read one bounded regular JSON file.
+      rotate_log: Keep one bounded previous operational log.
+      start_drainer: Start the detached one-shot process.
+      drain_jobs: Drain jobs serially under one lock.
+      build_parser: Define the command-line interface.
+      main: Dispatch one safe CLI operation.

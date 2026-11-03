@@ -1,0 +1,13 @@
+FROM public.ecr.aws/awsguru/aws-lambda-adapter:1.1.0@sha256:17cfd08eff1dfea3f6a9a1e9c65fdac80aa4919b6085e746615530f43f57d2f1 AS adapter
+FROM python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
+WORKDIR /app
+COPY --from=adapter /lambda-adapter /opt/extensions/lambda-adapter
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY app.py routing.py server.py ./
+COPY services ./services
+COPY document_api ./document_api
+COPY mcp_api ./mcp_api
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 AWS_LWA_PORT=5000 AWS_LWA_READINESS_CHECK_PATH=/health AWS_LWA_INVOKE_MODE=buffered
+EXPOSE 5000
+CMD ["uvicorn", "server:create_app", "--factory", "--host", "0.0.0.0", "--port", "5000", "--workers", "1", "--no-access-log", "--no-proxy-headers"]

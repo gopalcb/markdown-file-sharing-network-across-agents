@@ -1,0 +1,24 @@
+<wo-card [heading]="heading" eyebrow="Work Organizer">
+  @if (mode === 'callback') {
+    <wo-spinner label="Completing sign-in" />
+  } @else {
+    <p class="wo-muted">{{ description }}</p>
+    @if (auth.message()) {
+      <p role="alert">{{ auth.message() }}</p>
+    }
+    <div class="wo-actions">
+      @if (mode === 'denied') {
+        <button class="wo-button" type="button" (click)="auth.logout()">Sign out</button>
+      } @else {
+        <button
+          class="wo-button"
+          type="button"
+          [disabled]="!auth.ready() || auth.busy()"
+          (click)="auth.signIn(returnTo)"
+        >
+          {{ auth.busy() ? 'Opening sign-in…' : 'Sign in' }}
+        </button>
+      }
+    </div>
+  }
+</wo-card>

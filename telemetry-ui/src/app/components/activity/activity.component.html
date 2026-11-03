@@ -1,0 +1,13 @@
+<wo-card class="wo-enter" heading="Recent activity" description="Changes made during this visit."
+  ><div class="wo-stack">
+    @for (event of store.activity(); track $index) {
+      <wo-card
+        ><p>{{ event }}</p></wo-card
+      >
+    } @empty {
+      <wo-card
+        heading="No activity yet"
+        description="Add or complete a work item to see your progress."
+      />
+    }</div
+></wo-card>

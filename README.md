@@ -1,65 +1,237 @@
 # Markdown file-sharing network across agents
 
-An AWS storage and API foundation for agents that need to share durable Markdown across tools and sessions. A local file or a successful HTTP request alone does not establish that another agent can retrieve the intended document. This service binds uploads to an authenticated owner, stores Markdown in S3, and publishes a DynamoDB index with explicit per-file receipts.
+Keep project documents in reach as people and agents work. Share changed Markdown, collect useful lessons from completed tasks, and give users one place to read shared documents.
 
-This repository contains the infrastructure and document Lambda extracted from [GB Systems and Agents](https://github.com/gopalcb/gb-systems-and-agents). The [companion Markdown MCP service](https://github.com/gopalcb/markdown-mcp-service) supplies a separate MCP interface. No MCP server, web frontend, portal backend application, watcher, production data, or source Git history is included here.
+## From the watcher to AWS file storage
+
+Watcher → API Gateway → Lambda → S3 content and DynamoDB index. Dashed arrows show authentication and the upload acknowledgement. This is the repository’s example architecture, not a live deployment claim.
 
 ```mermaid
 flowchart LR
-    Agent[Native upload client] -->|Cognito access token and signed device proof| API[API Gateway HTTP API]
-    Cognito[Cognito user pools] -->|JWT issuer and audience| API
-    API --> Lambda[Document Lambda]
-    Adapter[Authorized IAM adapter] -->|Trusted direct invocation| Lambda
-    Lambda -->|Conditional Markdown writes| S3[Private encrypted S3]
-    Lambda -->|READY index and linked tasks| DDB[DynamoDB]
-    Lambda -->|Approval lookup and nonce reservation| Devices[Device and session tables]
+  W["Project watcher<br/>Detect changed Markdown"]
+  subgraph AWS["AWS · Document ingestion and storage"]
+    direction LR
+    C["Amazon Cognito"]
+    G["Amazon API Gateway"]
+    L["AWS Lambda · Telemetry API"]
+    S["Amazon S3 · Markdown content"]
+    D["Amazon DynamoDB · Document index"]
+    C -. "JWT issuer / signing keys" .-> G
+    G -->|Invoke| L
+    L -->|Write Markdown object| S
+    L -->|Publish READY metadata| D
+  end
+  W -. "Private sign-in / refresh" .-> C
+  W -->|JWT + device-signed upload| G
+  L -. "Matching READY receipt via API" .-> W
+  classDef local fill:#e8f5f1,stroke:#086b63,color:#192c36
+  class W local
+  style AWS fill:#f7f9fc,stroke:#8795a4
 ```
 
-## Request, authentication, and storage
+- **Share documents:** a configured watcher scans project folders and uploads new or changed Markdown.
 
-`POST /documents` and `POST /browser-documents` use separate Cognito JWT authorizers with explicit audiences. Lambda checks access-token ownership, original session age, signed native device proofs, administrator approval, and replay nonces before ingestion. Device IDs and MAC addresses are reported metadata, not hardware attestation. The optional native client uses macOS Keychain and a Swift signing helper; the offline quickstart does not require a Mac login.
+- **Capture lessons:** the strategic memory collector turns verified task evidence into candidates for review.
 
-IAM-authorized direct Lambda invocations support document reads, conditional edits, folders, linked plan tasks, and a project catalog. Their `username` is trusted input supplied by the authorized caller. Keep Lambda invoke permission narrowly scoped and have an adapter verify the human identity before constructing these events. The public HTTP routes reject direct-operation dispatch. No browser application or session-cookie backend is provided here.
+- **Read in one place:** Telemetry brings shared documents into a searchable document list and reader.
 
-Group uploads use `agent-work/raw-markdown/<username>/<file-group>/<filename>.md`. Project-path uploads use `agent-work/raw-markdown/<username>/<canonical-relative-path>` with no inserted file-group segment: `docs/projects/demo/notes.md` becomes `<username>/projects/demo/notes.md`. They strip one leading `docs/`, preserve nested paths, and derive a stable UUID5 from owner and canonical path. S3 uses conditional writes and source binding to detect collisions; DynamoDB publishes the compact `READY` index afterward. Linked plan tasks preserve independent task edits on source updates. Deletion reports record observations; they do not delete stored documents.
+- **Support agent workflows:** authenticated MCP uploads use the same document storage as the UI and native uploader.
 
-A successful receipt requires `status: READY` and a nonempty `file_id`. HTTP 201 means all files succeeded; 207 contains mixed per-file outcomes. S3 and DynamoDB are separate writes: an index failure can leave stored bytes without a published record, so an incomplete or uncertain result requires inspection before retry. Current reads return latest bytes and an ETag. Receipts do **not** pin an immutable S3 version. Browser-style edits require the expected ETag to avoid overwriting a concurrent edit.
+## The watcher follows Markdown changes
 
-## Run locally without AWS
+- Scans the configured project recursively for `.md` files, with watcher runtime folders excluded.
 
-Use Python 3.13, matching the Lambda runtime:
+- Waits for a stable snapshot and compares content hashes to skip unchanged documents.
+
+- Uploads through an authenticated, signed request; project-relative paths preserve document identity.
+
+- Confirms the matching `READY` receipt before marking an upload complete.
+
+- Keeps unknown write outcomes marked for reconciliation before another upload attempt.
+
+The watcher records success only after the exact READY receipt returns. If the outcome is unknown, reconcile before retrying.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant W as Project watcher
+  participant G as API Gateway
+  participant L as Telemetry Lambda
+  participant S as Amazon S3
+  participant D as DynamoDB
+  Note over W: Stable Markdown snapshot + changed hash
+  W->>G: Upload with JWT + device signature
+  Note over G: Verify Cognito JWT
+  G->>L: Authenticated request
+  Note over L: Validate identity, signature and path
+  L->>S: Write Markdown bytes
+  S-->>L: Object write acknowledged
+  L->>D: Publish READY document index
+  D-->>L: Metadata write acknowledged
+  L-->>G: READY receipt + file ID + content hash
+  G-->>W: Upload result
+  Note over W: Mark complete only after matching receipt
+```
+
+The watcher covers Markdown document changes, not every source-code edit. Its copied local files require verified project and identity binding before startup. The watcher implementation and its private runtime state remain local and are excluded from this public repository.
+
+## The strategic memory collector prepares lessons for review
+
+- Accepts a completion manifest after required verification and the final task summary.
+
+- Queues the job in SQLite and runs model work in a detached, one-shot worker.
+
+- Uses LangGraph and a Bedrock Qwen adapter to extract reusable lessons.
+
+- Checks passed-evidence references and rejects sensitive, temporary, unrelated or duplicate output.
+
+- Stores review-only candidates locally; a separately authorized workflow decides what becomes trusted memory.
+
+Only the extraction call uses Bedrock. The queue and candidates remain local; no automatic promotion or Telemetry publication is installed.
+
+```mermaid
+flowchart LR
+  subgraph LOCAL["Local collector · independent worker"]
+    E["Completed task<br/>Summary + passed checks"] --> Q[("SQLite job queue")]
+    Q --> X["LangGraph worker<br/>Extract lessons"]
+    X --> V["Evidence gate<br/>Validate references and content"]
+    V --> R[("Local review candidates")]
+    R --> H["Human review<br/>Separate promotion decision"]
+  end
+  B["Amazon Bedrock · Qwen"]
+  X -->|Bounded task evidence| B
+  B -->|Structured model output| X
+  classDef local fill:#eef3fc,stroke:#285daa,color:#192c36
+  class E,Q,X,V,R,H local
+  style LOCAL fill:#f7f9fc,stroke:#8795a4
+```
+
+The collector is implemented as an independent local package. Parent completion hooks are not installed, promotion is never automatic, and candidates are not currently published into Telemetry Documents.
+
+## Telemetry is the shared reading desk
+
+- Sign in to a configured Telemetry instance and open **Workspace → Documents**.
+
+- Use category filters or **My documents**; search the loaded list and use **Load more** for additional pages.
+
+- Select a document to open its Markdown in the reader/editor.
+
+- Save eligible owned documents with a version check; other edits save as a copy in your folder.
+
+- Use **Upload** to add Markdown directly through the UI.
+
+CloudFront serves the Angular UI from its own S3 bucket and forwards API requests. Document content lives in a separate S3 bucket; DynamoDB supplies its index. Responses return along the request path.
+
+```mermaid
+flowchart LR
+  U["User browser<br/>Telemetry Documents"]
+  subgraph AWS["AWS · UI delivery and document access"]
+    F["Amazon CloudFront"]
+    UI["Amazon S3 · UI assets"]
+    C["Amazon Cognito"]
+    G["Amazon API Gateway"]
+    L["AWS Lambda · Telemetry API"]
+    D["Amazon DynamoDB · Document list"]
+    S["Amazon S3 · Markdown content"]
+    F -->|Serve Angular assets| UI
+    F -->|Forward API requests| G
+    G --> L
+    L -->|List / filter| D
+    L -->|Read / save Markdown| S
+  end
+  U -->|Open workspace / API requests| F
+  U -. "Sign in" .-> C
+  classDef local fill:#e8f5f1,stroke:#086b63,color:#192c36
+  class U local
+  style AWS fill:#f7f9fc,stroke:#8795a4
+```
+
+The UI and API are present in this checkout. This guide describes their source behavior; it does not establish a live deployment or a working private sign-in session.
+
+## Source notes
+
+Based on current local documentation and implementation inspected on 02 November 2026. No watcher, upload, cloud inference or live application check was run for this guide.
+
+- [Architecture](ARCHITECTURE.md) — runtime and storage responsibilities
+
+- [Collector guide](strategic-memory-collector-agent/README.md) — queue, status and review
+
+- [Collector architecture](strategic-memory-collector-agent/ARCHITECTURE.md) — extraction and evidence gates
+
+- [Documents component](telemetry-ui/src/app/components/documents/documents.component.ts) — search, filters and saves
+
+Diagram syntax: [Mermaid flowcharts](https://mermaid.js.org/syntax/flowchart.html). AWS service artwork: [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/), embedded from [AWS Labs icon library v20.0](https://github.com/awslabs/aws-icons-for-plantuml/tree/v20.0). GitHub renders the Mermaid diagrams in this README. The [HTML overview](project-overview.html) includes embedded diagrams and AWS artwork for offline viewing.
+
+Explore next: **receipt reconciliation** to understand uncertain uploads; **candidate review** to decide which lessons deserve promotion. If a job is queued, is memory already trusted? No — collection and review still follow.
+
+### Key takeaways
+
+- The watcher keeps changed Markdown moving toward shared storage.
+
+- The collector prepares evidence-backed lessons for review.
+
+- Telemetry gives users one place to find and read shared documents.
+
+## Repository layout and validation
+
+The current application uses one compact Flask/FastMCP runtime in
+`telemetry-api/`, an Angular UI in `telemetry-ui/`, and CDK/templates in
+`aws-infrastructure/`. Document persistence lives in two services:
+`dynamodb_document_service.py` and `s3_document_service.py`.
+
+The older standalone `aws-infrastructure/document-api/` extraction has been
+removed. Do not restore it alongside the current runtime. Future application work
+belongs here; the Softrobots copy remains historical deployment context.
+
+`strategic-memory-collector-agent/` is a separate local LangGraph worker using
+Bedrock Qwen. It queues completed task evidence and stores reviewable candidates.
+Its tests use a fake model; parent completion hooks and automatic promotion are
+not installed.
+
+## Local validation
+
+Use Python 3.13 and Node 22.13 or later:
 
 ```sh
-python3.13 -m venv .venv
-. .venv/bin/activate
-python -m pip install -r requirements-dev.txt
+uv venv --python 3.13 .venv
+uv pip install --python .venv/bin/python -r requirements-dev.txt
 AWS_EC2_METADATA_DISABLED=true AWS_DEFAULT_REGION=ca-central-1 \
-  AWS_ACCESS_KEY_ID=testing AWS_SECRET_ACCESS_KEY=testing python -m pytest -q
-cfn-lint aws-infrastructure/*.yaml aws-infrastructure/document-api/template.yaml
-python scripts/local_smoke.py
+AWS_ACCESS_KEY_ID=testing AWS_SECRET_ACCESS_KEY=testing \
+.venv/bin/python -m pytest -q
+.venv/bin/ruff check telemetry-api aws-infrastructure/cdk tests
+.venv/bin/cfn-lint aws-infrastructure/*.yaml
+npm ci
+npm run build
+npm test
+uv sync --project strategic-memory-collector-agent --locked
+(cd strategic-memory-collector-agent && uv run --locked pytest -q && uv run --locked ruff check .)
 ```
 
-The smoke script runs the real handler inside Moto, uploads fixture Markdown through the trusted direct-invocation boundary, reads it back, and verifies stable identity on repeat upload. It prints `offline-moto`, upload 201, read 200, `READY`, and `stable_file_id: true`. Its temporary resources disappear when the process exits. Tests cover JWT ownership, replay/device approval, payload validation, storage paths, IAM policy boundaries, conflict handling, linked tasks, reads, and sanitization. These checks do not prove real Cognito login, private device enrollment, live IAM behavior, or deployed AWS acceptance.
+Run collector lint from its folder with `uv run --locked ruff check .`.
+The root npm workspace/lockfile and `.npmrc` provide reproducible UI installation.
+The compact runtime suite and CDK suite run together by default; the collector
+has its own package environment.
 
-## Infrastructure and packaging
+For synthetic browser checks, install Chromium with
+`npx playwright install chromium`, then run
+`WO_BROWSER_EVIDENCE=/tmp/markdown-browser npm run test:browser`.
+On macOS the harness uses installed Chrome by default; override
+`WO_BROWSER_EXECUTABLE` if needed. Fixtures do not prove private authentication.
 
-- `aws-infrastructure/document-api/template.yaml`: HTTP API, Lambda, retained S3 buckets, document/project/deletion tables, and native device registries.
-- `aws-infrastructure/auth.yaml`: public upload client attached to an existing pool, plus the retained session/device binding table.
-- `aws-infrastructure/username-auth.yaml`: optional retained username pool, hosted-login domain, and a separate upload client. Set `DomainPrefix`; `EmailSourceArn` is an explicit SES identity parameter; enabling email OTP additionally needs a verified sender and a compatible pool tier/region.
-- `aws-infrastructure/document-api/iam/`: example separated runtime, provisioner, deployer, and explicit device-approval policy documents.
+## Storage and release boundary
 
-Cloud deployment is deliberately not automated. GitHub Actions only installs dependencies, runs tests, lints templates, and runs the offline smoke. It has `contents: read`, no OIDC permission, and no deployment job.
+The API, UI sessions and MCP use the same document storage implementation.
+Owner/path identity and conditional writes preserve linked tasks; successful
+uploads require READY receipts. Unknown write outcomes require reconciliation.
+The collector's local candidates are separate from these document records.
 
-Before any separately authorized deployment, provision and review the role trust/policies for your account, replace the fictitious `123456789012` account and example pool/client values in IAM/helper examples, and review the retained resource names and region. The source-compatible `softrobots-*` names remain because runtime tables and policy scopes share those names; use an isolated account or review collisions before provisioning. Configure both authorizer pool/client pairs explicitly from your Cognito stacks; the optional username stack supplies one pair. `auth.yaml` attaches to an existing pool and does not enable OTP on that pool itself.
+CI validates runtime/CDK, collector and UI independently with read-only repository
+permissions. No deployment, AWS credential action, IAM policy updater, retirement,
+or production cutover helper is supplied. CDK synthesis uses fictitious account
+123456789012 and example identities; real-account synthesis is rejected.
+A live deployment needs explicit ownership/configuration and separate authorization.
 
-Package the **entire** `aws-infrastructure/document-api/src/` directory, including `session_device_service.py`, plus its installed requirements into the Lambda zip root (`app.py` at root). No package builder is shipped. Build native dependencies in a Linux environment compatible with Python 3.13 and the Lambda architecture. Supply `ArtifactBucket` and `ArtifactKey` to the API template through your own reviewed delivery process. The templates use a pre-existing `softrobots-document-api-lambda-role`; creating that role is an explicit prerequisite.
-
-Scripts for artifact preparation, IAM policy configuration, auth discovery, and device approval are retained as tested **reference helpers**. Their example account/role/repository guards require deliberate customization; the workflows they mention from the original system are not shipped. They may mutate AWS when explicitly invoked with real credentials. None runs during local validation or CI. `scripts/upload.py` defaults to `example.invalid`; a real upload requires an explicit `--upload-url`, human authentication, and approved native device setup.
-
-## Limits and operational ownership
-
-Markdown content is bounded to 256 KiB per file. Pagination is bounded and identity-bound. Storage is private, encrypted, and retained on stack deletion; current bucket versioning is suspended, and any historical versions survive. Retained storage, DynamoDB, Lambda, API Gateway, logs, Cognito, and optional SES can incur charges. Removing a stack does not remove retained data: use a separately reviewed retention/cleanup procedure.
-
-The MCP service is independently deployed and has its own authentication, dependencies, and receipt contract. Do not assume that using that companion service invokes this Lambda's linked-task workflow. This extraction provides local evidence only and does not deploy, alter, or validate any production system.
-
-See [ARCHITECTURE.md](ARCHITECTURE.md), [code-map.yaml](code-map.yaml), and [PROVENANCE.md](PROVENANCE.md) for boundaries and extraction details. Licensed under [MIT](LICENSE).
+Copied watcher/device/session/delivery files remain ignored local state.
+Do not publish them or start them without checking their identity/project binding.
+See [architecture](ARCHITECTURE.md), [code map](code-map.yaml), and
+[provenance](PROVENANCE.md).

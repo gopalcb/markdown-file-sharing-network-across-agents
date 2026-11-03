@@ -1,29 +1,21 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Retained username Cognito pool, hosted login and public upload client.
+Description: Retained username identity pool and native document-upload clients.
 Parameters:
   EnableEmailOtp:
     Type: String
     Default: 'false'
-    AllowedValues:
-    - 'false'
-    - 'true'
-  DomainPrefix:
+    AllowedValues: ['false', 'true']
+  EmailOtpSourceArn:
     Type: String
-    Description: Globally unique Cognito hosted-login prefix.
-  EmailSourceArn:
+    NoEcho: true
+    Description: SES identity ARN required only when email OTP is enabled.
+  EmailOtpFrom:
     Type: String
-    Description: Verified SES identity ARN; required only when EnableEmailOtp is true.
-    MinLength: 20
-    AllowedPattern: arn:[a-z0-9-]+:ses:[a-z0-9-]+:[0-9]{12}:identity/.+
-  EmailFrom:
-    Type: String
-    Default: ''
-    Description: Verified sender; required only when EnableEmailOtp is true.
+    NoEcho: true
+    Description: Verified sender value required only when email OTP is enabled.
 Conditions:
   EmailOtpEnabled:
-    Fn::Equals:
-    - Ref: EnableEmailOtp
-    - 'true'
+    Fn::Equals: [{Ref: EnableEmailOtp}, 'true']
 Resources:
   Pool:
     Type: AWS::Cognito::UserPool
@@ -54,14 +46,14 @@ Resources:
         Fn::If:
         - EmailOtpEnabled
         - EmailSendingAccount: DEVELOPER
-          SourceArn:
-            Ref: EmailSourceArn
-          From:
-            Ref: EmailFrom
+          SourceArn: {Ref: EmailOtpSourceArn}
+          From: {Ref: EmailOtpFrom}
         - EmailSendingAccount: COGNITO_DEFAULT
       MfaConfiguration: OPTIONAL
       EnabledMfas:
       - SOFTWARE_TOKEN_MFA
+      # Cognito defaults the RP ID to this pool's managed-login prefix domain.
+      # Keep that domain stable; changing it invalidates registered passkeys.
       WebAuthnUserVerification: required
       WebAuthnFactorConfiguration: MULTI_FACTOR_WITH_USER_VERIFICATION
       Policies:
@@ -69,11 +61,8 @@ Resources:
           AllowedFirstAuthFactors:
             Fn::If:
             - EmailOtpEnabled
-            - - PASSWORD
-              - WEB_AUTHN
-              - EMAIL_OTP
-            - - PASSWORD
-              - WEB_AUTHN
+            - [PASSWORD, WEB_AUTHN, EMAIL_OTP]
+            - [PASSWORD, WEB_AUTHN]
         PasswordPolicy:
           MinimumLength: 16
           RequireLowercase: true
@@ -93,9 +82,101 @@ Resources:
     Properties:
       UserPoolId:
         Ref: Pool
-      Domain:
-        Ref: DomainPrefix
+      Domain: softrobots-usernames-123456789012
       ManagedLoginVersion: 2
+  PortalUsers:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      UserPoolId:
+        Ref: Pool
+      GroupName: portal-users
+      Description: Explicit workspace access; no AWS role.
+  PortalClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId:
+        Ref: Pool
+      ClientName: work-organizer-portal
+      GenerateSecret: false
+      ExplicitAuthFlows:
+      - ALLOW_REFRESH_TOKEN_AUTH
+      - ALLOW_USER_AUTH
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      AccessTokenValidity: 5
+      IdTokenValidity: 5
+      RefreshTokenValidity: 90
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+      - code
+      AllowedOAuthScopes:
+      - openid
+      - email
+      - aws.cognito.signin.user.admin
+      SupportedIdentityProviders:
+      - COGNITO
+      CallbackURLs:
+      - https://portal.example.com/work-organizer/auth/callback
+      LogoutURLs:
+      - https://portal.example.com/work-organizer/signed-out
+  PortalClientBranding:
+    Type: AWS::Cognito::ManagedLoginBranding
+    DependsOn: Domain
+    Properties:
+      UserPoolId:
+        Ref: Pool
+      ClientId:
+        Ref: PortalClient
+      UseCognitoProvidedValues: false
+      Settings: {"categories":{"global":{"colorSchemeMode":"LIGHT","spacingDensity":"REGULAR","pageHeader":{"enabled":false},"pageFooter":{"enabled":false}},"form":{"location":{"horizontal":"CENTER","vertical":"CENTER"},"displayGraphics":false,"languageSelector":{"enabled":false}}},"components":{"pageBackground":{"image":{"enabled":false},"lightMode":{"color":"f6f8f9ff"}},"form":{"borderRadius":4,"backgroundImage":{"enabled":false},"logo":{"enabled":false},"lightMode":{"backgroundColor":"f6f8f9ff","borderColor":"17645861"}},"pageText":{"lightMode":{"headingColor":"182d39ff","bodyColor":"182d39ff","descriptionColor":"526773ff"}},"primaryButton":{"lightMode":{"defaults":{"backgroundColor":"176458ff","textColor":"f6f8f9ff"},"hover":{"backgroundColor":"104e44ff","textColor":"f6f8f9ff"},"active":{"backgroundColor":"104e44ff","textColor":"f6f8f9ff"}}},"alert":{"borderRadius":4,"lightMode":{"error":{"borderColor":"a12e2eff"}}}},"componentClasses":{"buttons":{"borderRadius":4},"input":{"borderRadius":4,"lightMode":{"defaults":{"backgroundColor":"f6f8f9ff","borderColor":"17645861"},"placeholderColor":"526773ff"}},"inputLabel":{"lightMode":{"textColor":"182d39ff"}},"inputDescription":{"lightMode":{"textColor":"526773ff"}},"focusState":{"lightMode":{"borderColor":"176458ff"}},"link":{"lightMode":{"defaults":{"textColor":"176458ff"},"hover":{"textColor":"104e44ff"}}}}}
+  DevelopmentClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId:
+        Ref: Pool
+      ClientName: work-organizer-local-development
+      GenerateSecret: false
+      ExplicitAuthFlows:
+      - ALLOW_REFRESH_TOKEN_AUTH
+      - ALLOW_USER_AUTH
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      AccessTokenValidity: 5
+      IdTokenValidity: 5
+      RefreshTokenValidity: 90
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+      - code
+      AllowedOAuthScopes:
+      - openid
+      - email
+      - aws.cognito.signin.user.admin
+      SupportedIdentityProviders:
+      - COGNITO
+      CallbackURLs:
+      - http://localhost:4200/work-organizer/auth/callback
+      - http://localhost:8080/work-organizer/auth/callback
+      LogoutURLs:
+      - http://localhost:4200/work-organizer/signed-out
+      - http://localhost:8080/work-organizer/signed-out
+  DevelopmentClientBranding:
+    Type: AWS::Cognito::ManagedLoginBranding
+    DependsOn: Domain
+    Properties:
+      UserPoolId:
+        Ref: Pool
+      ClientId:
+        Ref: DevelopmentClient
+      UseCognitoProvidedValues: false
+      Settings: {"categories":{"global":{"colorSchemeMode":"LIGHT","spacingDensity":"REGULAR","pageHeader":{"enabled":false},"pageFooter":{"enabled":false}},"form":{"location":{"horizontal":"CENTER","vertical":"CENTER"},"displayGraphics":false,"languageSelector":{"enabled":false}}},"components":{"pageBackground":{"image":{"enabled":false},"lightMode":{"color":"f6f8f9ff"}},"form":{"borderRadius":4,"backgroundImage":{"enabled":false},"logo":{"enabled":false},"lightMode":{"backgroundColor":"f6f8f9ff","borderColor":"17645861"}},"pageText":{"lightMode":{"headingColor":"182d39ff","bodyColor":"182d39ff","descriptionColor":"526773ff"}},"primaryButton":{"lightMode":{"defaults":{"backgroundColor":"176458ff","textColor":"f6f8f9ff"},"hover":{"backgroundColor":"104e44ff","textColor":"f6f8f9ff"},"active":{"backgroundColor":"104e44ff","textColor":"f6f8f9ff"}}},"alert":{"borderRadius":4,"lightMode":{"error":{"borderColor":"a12e2eff"}}}},"componentClasses":{"buttons":{"borderRadius":4},"input":{"borderRadius":4,"lightMode":{"defaults":{"backgroundColor":"f6f8f9ff","borderColor":"17645861"},"placeholderColor":"526773ff"}},"inputLabel":{"lightMode":{"textColor":"182d39ff"}},"inputDescription":{"lightMode":{"textColor":"526773ff"}},"focusState":{"lightMode":{"borderColor":"176458ff"}},"link":{"lightMode":{"defaults":{"textColor":"176458ff"},"hover":{"textColor":"104e44ff"}}}}}
   UploadClient:
     Type: AWS::Cognito::UserPoolClient
     Properties:
@@ -104,14 +185,10 @@ Resources:
       ClientName: work-organizer-document-upload
       GenerateSecret: false
       AllowedOAuthFlowsUserPoolClient: true
-      AllowedOAuthFlows:
-      - code
-      AllowedOAuthScopes:
-      - aws.cognito.signin.user.admin
-      SupportedIdentityProviders:
-      - COGNITO
-      CallbackURLs:
-      - http://localhost:8765/callback
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [aws.cognito.signin.user.admin]
+      SupportedIdentityProviders: [COGNITO]
+      CallbackURLs: ['http://localhost:8765/callback']
       ExplicitAuthFlows:
       - ALLOW_USER_AUTH
       - ALLOW_REFRESH_TOKEN_AUTH
@@ -125,6 +202,14 @@ Resources:
         AccessToken: minutes
         IdToken: minutes
         RefreshToken: days
+  UploadClientBranding:
+    Type: AWS::Cognito::ManagedLoginBranding
+    DependsOn: Domain
+    Properties:
+      UserPoolId: {Ref: Pool}
+      ClientId: {Ref: UploadClient}
+      UseCognitoProvidedValues: false
+      Settings: {"categories":{"global":{"colorSchemeMode":"LIGHT","spacingDensity":"REGULAR","pageHeader":{"enabled":false},"pageFooter":{"enabled":false}},"form":{"location":{"horizontal":"CENTER","vertical":"CENTER"},"displayGraphics":false,"languageSelector":{"enabled":false}}},"components":{"pageBackground":{"image":{"enabled":false},"lightMode":{"color":"f6f8f9ff"}},"form":{"borderRadius":4,"backgroundImage":{"enabled":false},"logo":{"enabled":false},"lightMode":{"backgroundColor":"f6f8f9ff","borderColor":"17645861"}},"pageText":{"lightMode":{"headingColor":"182d39ff","bodyColor":"182d39ff","descriptionColor":"526773ff"}},"primaryButton":{"lightMode":{"defaults":{"backgroundColor":"176458ff","textColor":"f6f8f9ff"},"hover":{"backgroundColor":"104e44ff","textColor":"f6f8f9ff"},"active":{"backgroundColor":"104e44ff","textColor":"f6f8f9ff"}}},"alert":{"borderRadius":4,"lightMode":{"error":{"borderColor":"a12e2eff"}}}},"componentClasses":{"buttons":{"borderRadius":4},"input":{"borderRadius":4,"lightMode":{"defaults":{"backgroundColor":"f6f8f9ff","borderColor":"17645861"},"placeholderColor":"526773ff"}},"inputLabel":{"lightMode":{"textColor":"182d39ff"}},"inputDescription":{"lightMode":{"textColor":"526773ff"}},"focusState":{"lightMode":{"borderColor":"176458ff"}},"link":{"lightMode":{"defaults":{"textColor":"176458ff"},"hover":{"textColor":"104e44ff"}}}}}
 Outputs:
   UserPoolId:
     Value:
@@ -132,9 +217,17 @@ Outputs:
   Issuer:
     Value:
       Fn::Sub: https://cognito-idp.${AWS::Region}.${AWS::URLSuffix}/${Pool}
+  ClientId:
+    Value:
+      Ref: PortalClient
   UploadClientId:
     Value:
       Ref: UploadClient
-  Domain:
+  DevelopmentClientId:
     Value:
-      Fn::Sub: https://${DomainPrefix}.auth.${AWS::Region}.amazoncognito.com
+      Ref: DevelopmentClient
+  Domain:
+    Value: https://softrobots-usernames-123456789012.auth.ca-central-1.amazoncognito.com
+  Group:
+    Value:
+      Ref: PortalUsers
